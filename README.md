@@ -1,29 +1,31 @@
 # NectarX---BSS
 
-NectarX is a Windows AutoHotkey project for Bee Swarm Simulator.
+NectarX is a Windows AutoHotkey v2 project for Bee Swarm Simulator.
 
-## Current project layout
+## Project layout
+- `NectarX.ahk` — main GUI and screen-reader template tester.
+- `NectarX paths/` — field movement path snippets.
+- `NectarX patterns/` — movement pattern snippets.
+- `NectarX images/` — add your own cropped PNG/BMP screen templates here. This folder is created by the GUI when it starts.
+- `NectarX.ini` and `NectarX.log` — generated locally by the GUI.
 
-- `NectarX.ahk` — main GUI scaffold (AutoHotkey v2).
-- `NectarX paths/` — movement/path scripts.
-- `NectarX patterns/` — pattern snippets used by the movement system.
-- `NectarX.ini` — generated locally when settings are saved.
-- `NectarX.log` — generated locally for status/log messages.
+## Current features
+- GUI tabs for Dashboard, Patterns, Screen Reader, Settings, and Logs.
+- Roblox process/window detection.
+- Template-based screen matching with AutoHotkey `ImageSearch`, limited to the Roblox client area.
+- Repetition, movement scale, and image-variation settings.
+- Local settings and logs.
 
-## Running the GUI
-
-1. Install **AutoHotkey v2** on Windows.
-2. Download or clone this repository.
+## Run
+1. Install AutoHotkey v2 on Windows.
+2. Download or clone the repository.
 3. Run `NectarX.ahk`.
-4. Choose a pattern and configure repetitions and movement scale.
-5. Save settings when needed.
+4. To test image recognition, put a tightly cropped PNG/BMP of a stable UI element in `NectarX images`, refresh the template list, open Roblox, and select **Test selected image**.
 
-## Important: current development status
+For best results, use a crop taken at the same UI scale/resolution as the game. Templates can fail if the UI changes, an animation covers them, or the game is scaled differently.
 
-The GUI is a scaffold and the Start button is intentionally guarded. The uploaded pattern files are code fragments, not standalone macros: they refer to shared functions such as `Walk()` and variables such as `reps`, `size`, and movement-key bindings. The shared runner/controller still needs to be implemented and tested before pattern execution can be enabled.
+## Important development status
+The GUI and basic template-matching test are scaffolding; they have not been runtime-tested on the user's Windows setup. The Start button is intentionally guarded. Existing path/pattern scripts call shared functions and use key variables that are not yet integrated into one runner. A complete runner, tested stop handling, and more robust GDI+ capture/matching still need implementation before unattended use.
 
-Image recognition, Roblox-window checks, reliable stop handling, and any additional macro modules are also future integration work. Do not assume the macro is ready for unattended use.
-
-## Contributing
-
-Keep path scripts in `NectarX paths/` and pattern snippets in `NectarX patterns/`. The GUI discovers `.ahk` files in the pattern folder automatically.
+## Reference
+Natro Macro is an independent open-source project. NectarX uses an original scaffold and built-in AutoHotkey ImageSearch in this first screen-recognition pass; it does not copy Natro's GUI or source files.
