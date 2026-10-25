@@ -12,6 +12,7 @@ global ConfigFile := A_ScriptDir "\NectarX.ini"
 global LogFile := A_ScriptDir "\NectarX.log"
 global IsRunning := false
 global RobloxHwnd := 0
+global StatusOverride := ""
 
 CoordMode "Pixel", "Screen"
 DirCreate(ImageDir)
@@ -30,7 +31,7 @@ main.AddGroupBox("x22 y82 w710 h72", " LIVE STATUS ")
 status := main.AddText("x42 y108 w660 h22 cFFC766", "● SETUP - waiting for Roblox")
 windowStatus := main.AddText("x42 y132 w660 h18 cAAB7D0", "Screen reader is available for testing. Movement runner is not enabled.")
 
-tabs := main.AddTab3("x22 y166 w710 h330", ["Dashboard", "Patterns", "Screen Reader", "Settings", "Logs"])
+tabs := main.AddTab3("x22 y166 w710 h330", ["Dashboard", "Farming", "Patterns", "Conversion", "Quests", "Planters", "Screen Reader", "Settings", "Logs"])
 tabs.UseTab(1)
 main.AddText("x44 y205 w620 h24 c69E7FF", "Welcome to NectarX")
 main.AddText("x44 y240 w640 h24", "Choose a pattern, configure movement, and test screen templates.")
@@ -39,6 +40,21 @@ main.AddText("x44 y312 w640 h40 cAAB7D0", "Safety: Start stays disabled logicall
 main.AddText("x44 y374 w640 h24 cAAB7D0", "Planned modules: Roblox window detection, image matching, runner, logs, and safe stop.")
 
 tabs.UseTab(2)
+main.AddText("x44 y205 w620 h24 c69E7FF", "Gathering nectar")
+main.AddText("x44 y238 w620 h22", "Choose a field, movement method, pattern and gather duration.")
+main.AddText("x44 y274 w130 h22", "Field")
+fieldItems := ["Sunflower", "Dandelion", "Blue Flower", "Mushroom", "Clover", "Bamboo", "Pineapple", "Spider", "Strawberry", "Stump", "Cactus", "Pumpkin", "Rose", "Pine Tree", "Mountain Top", "Coconut", "Pepper"]
+fieldBox := main.AddDropDownList("x44 y300 w190 Choose1", fieldItems)
+Loop fieldItems.Length {
+    if fieldItems[A_Index] = settings.field
+        fieldBox.Choose(A_Index)
+}
+main.AddText("x254 y274 w140 h22", "Gather minutes")
+gatherMinutesBox := main.AddEdit("x254 y300 w100 h28 Number", settings.gatherMinutes)
+main.AddText("x44 y346 w630 h48 cAAB7D0", "Planned workflow: travel to field, run pattern, gather for selected time, then return/convert when a validated backpack trigger is available. This page is configuration scaffolding; it does not start farming yet.")
+main.AddText("x44 y414 w630 h22 cFFC766", "Farming engine: NOT CONNECTED")
+
+ tabs.UseTab(3)
 main.AddText("x44 y205 w170 h22", "Pattern")
 patternList := main.AddDropDownList("x44 y231 w300 Choose1", [])
 refreshPatternsBtn := main.AddButton("x356 y230 w110 h28", "Refresh list")
@@ -47,10 +63,30 @@ main.AddText("x44 y275 w150 h22", "Repetitions")
 repsBox := main.AddEdit("x44 y301 w120 h28 Number", settings.reps)
 main.AddText("x194 y275 w150 h22", "Movement scale")
 sizeBox := main.AddEdit("x194 y301 w120 h28", settings.size)
-main.AddText("x44 y352 w630 h50 cAAB7D0", "The pattern files are snippets that expect shared functions and movement-key variables. They are not safe to execute by themselves yet.")
-main.AddText("x44 y422 w630 h22 cFFC766", "Runner status: NOT CONNECTED")
+main.AddText("x44 y352 w170 h22", "Travel method")
+movementModeBox := main.AddDropDownList("x44 y378 w200 Choose" (settings.movementMode = "Cannon" ? 2 : 1), ["Walking", "Cannon"])
+main.AddText("x44 y416 w630 h42 cAAB7D0", "Walking uses keyboard movement; Cannon selects cannon-based travel where a route supports it. The execution runner is still disabled until helpers and stop handling are validated.")
+main.AddText("x44 y460 w630 h22 cFFC766", "Runner status: NOT CONNECTED")
 
-tabs.UseTab(3)
+tabs.UseTab(4)
+main.AddText("x44 y205 w620 h24 c69E7FF", "Backpack and honey conversion")
+main.AddText("x44 y242 w630 h44", "Planned: detect full backpack, travel to hive, convert pollen to honey, and return to the selected field.")
+main.AddText("x44 y312 w630 h48 cAAB7D0", "Requires verified backpack meter, hive/convert cues, safe travel steps and retry handling. Not automated in this build.")
+main.AddText("x44 y390 w630 h22 cFFC766", "Conversion engine: NOT CONNECTED")
+
+ tabs.UseTab(5)
+main.AddText("x44 y205 w620 h24 c69E7FF", "Quests and activities")
+main.AddText("x44 y242 w630 h44", "Potential modules: bear quests, dispensers, mobs, bosses, ant challenge and timed activities.")
+main.AddText("x44 y312 w630 h48 cAAB7D0", "Quest progress recognition and reliable interaction sequences are not implemented. Each activity needs its own validated state detection and route.")
+main.AddText("x44 y390 w630 h22 cFFC766", "Activities engine: NOT CONNECTED")
+
+ tabs.UseTab(6)
+main.AddText("x44 y205 w620 h24 c69E7FF", "Planter management")
+main.AddText("x44 y242 w630 h44", "Image assets include planter icons, but icons alone do not tell the macro which planter is placed or ready.")
+main.AddText("x44 y312 w630 h48 cAAB7D0", "Future workflow: track planter, field, growth timer and harvest state; verify each action before continuing. Not automated in this build.")
+main.AddText("x44 y390 w630 h22 cFFC766", "Planter engine: NOT CONNECTED")
+
+ tabs.UseTab(7)
 main.AddText("x44 y205 w620 h22 c69E7FF", "Image template testing")
 main.AddText("x44 y235 w630 h22", "Place a cropped PNG of a recognizable Roblox/BSS UI element in NectarX images.")
 main.AddText("x44 y270 w140 h22", "Template")
@@ -64,7 +100,7 @@ findRobloxBtn.OnEvent("Click", DetectRobloxButton)
 imageResult := main.AddEdit("x44 y386 w640 h62 +ReadOnly -Wrap", "No image test run yet.")
 main.AddText("x44 y458 w640 h22 cAAB7D0", "Matching is limited to the Roblox client area when its window is detected.")
 
-tabs.UseTab(4)
+tabs.UseTab(8)
 main.AddText("x44 y205 w180 h22", "Roblox window title")
 windowBox := main.AddEdit("x44 y231 w300 h28", settings.windowTitle)
 main.AddText("x44 y275 w150 h22", "Default repetitions")
@@ -75,7 +111,7 @@ main.AddText("x44 y352 w640 h22", "Image match variation (0-255)")
 variationBox := main.AddEdit("x44 y378 w120 h28 Number", settings.variation)
 main.AddText("x44 y422 w640 h22 cAAB7D0", "Settings save locally to NectarX.ini. Image templates stay in NectarX images.")
 
-tabs.UseTab(5)
+tabs.UseTab(9)
 logBox := main.AddEdit("x44 y205 w650 h245 +ReadOnly -Wrap", ReadLog())
 tabs.UseTab()
 
@@ -116,6 +152,11 @@ RefreshImages(*) {
         Loop Files, ImageDir "\*.bmp", "F"
             items.Push(A_LoopFileName)
     }
+    ; Also expose the legacy/root-level image library so existing assets are discoverable.
+    Loop Files, A_ScriptDir "\*.png", "F"
+        items.Push("Root: " A_LoopFileName)
+    Loop Files, A_ScriptDir "\*.bmp", "F"
+        items.Push("Root: " A_LoopFileName)
     imageList.Delete()
     imageList.Add(items.Length ? items : ["No templates found"])
     imageList.Choose(1)
@@ -128,13 +169,16 @@ LoadSettings() {
         reps: IniRead(ConfigFile, "General", "Repetitions", "3"),
         size: IniRead(ConfigFile, "General", "MovementScale", "1.0"),
         windowTitle: IniRead(ConfigFile, "General", "WindowTitle", "Roblox"),
-        variation: IniRead(ConfigFile, "ScreenReader", "Variation", "35")
+        variation: IniRead(ConfigFile, "ScreenReader", "Variation", "35"),
+        movementMode: IniRead(ConfigFile, "Movement", "Method", "Walking"),
+        field: IniRead(ConfigFile, "Farming", "Field", "Sunflower"),
+        gatherMinutes: IniRead(ConfigFile, "Farming", "GatherMinutes", "10")
     }
 }
 
 SaveSettings(*) {
     global ConfigFile, repsBox, sizeBox, repsSettingBox, sizeSettingBox
-    global windowBox, variationBox
+    global windowBox, variationBox, movementModeBox, fieldBox, gatherMinutesBox
     try reps := Integer(repsSettingBox.Value)
     catch {
         MsgBox("Repetitions must be a whole number.", "NectarX", "Icon!")
@@ -143,6 +187,15 @@ SaveSettings(*) {
     try scale := Number(sizeSettingBox.Value)
     catch {
         MsgBox("Movement scale must be numeric.", "NectarX", "Icon!")
+        return
+    }
+    try gatherMinutes := Integer(gatherMinutesBox.Value)
+    catch {
+        MsgBox("Gather duration must be a whole number.", "NectarX", "Icon!")
+        return
+    }
+    if gatherMinutes < 1 || gatherMinutes > 240 {
+        MsgBox("Gather duration must be between 1 and 240 minutes.", "NectarX", "Icon!")
         return
     }
     try variation := Integer(variationBox.Value)
@@ -166,6 +219,9 @@ SaveSettings(*) {
     IniWrite(scale, ConfigFile, "General", "MovementScale")
     IniWrite(Trim(windowBox.Value), ConfigFile, "General", "WindowTitle")
     IniWrite(variation, ConfigFile, "ScreenReader", "Variation")
+    IniWrite(movementModeBox.Text = "Cannon" ? "Cannon" : "Walking", ConfigFile, "Movement", "Method")
+    IniWrite(fieldBox.Text, ConfigFile, "Farming", "Field")
+    IniWrite(gatherMinutes, ConfigFile, "Farming", "GatherMinutes")
     repsBox.Value := reps
     sizeBox.Value := scale
     Log("Settings saved.")
@@ -173,7 +229,8 @@ SaveSettings(*) {
 }
 
 DetectRobloxButton(*) {
-    global imageResult
+    global imageResult, StatusOverride
+    StatusOverride := ""
     if DetectRoblox()
         imageResult.Value := "Roblox window detected." Chr(13) Chr(10) "Client bounds: " GetClientBoundsText()
     else
@@ -181,7 +238,7 @@ DetectRobloxButton(*) {
 }
 
 DetectRoblox() {
-    global RobloxHwnd, status, windowStatus
+    global RobloxHwnd, status, windowStatus, windowBox, StatusOverride
     RobloxHwnd := WinExist("ahk_exe RobloxPlayerBeta.exe")
     if !RobloxHwnd && windowBox.Value != ""
         RobloxHwnd := WinExist(windowBox.Value)
@@ -189,11 +246,13 @@ DetectRoblox() {
         try title := WinGetTitle("ahk_id " RobloxHwnd)
         catch
             title := "Roblox"
-        status.Text := "● READY - Roblox window detected"
+        if StatusOverride = ""
+            status.Text := "● READY - Roblox window detected"
         windowStatus.Text := "Window: " title " | image matching targets the client area."
         return true
     }
-    status.Text := "● WAITING - Roblox window not found"
+    if StatusOverride = ""
+        status.Text := "● WAITING - Roblox window not found"
     windowStatus.Text := "Open Roblox. Image matching will search only inside the detected client area."
     return false
 }
@@ -220,7 +279,7 @@ TestSelectedImage(*) {
         imageResult.Value := "Roblox window not found. Open Roblox before testing image matching."
         return
     }
-    imagePath := ImageDir "\" imageList.Text
+    imagePath := InStr(imageList.Text, "Root: ") = 1 ? A_ScriptDir "\" SubStr(imageList.Text, 7) : ImageDir "\" imageList.Text
     if !FileExist(imagePath) {
         imageResult.Value := "Template file missing: " imagePath
         RefreshImages()
@@ -251,14 +310,16 @@ TestSelectedImage(*) {
 }
 
 StartMacro(*) {
-    global status
-    status.Text := "● BLOCKED - runner not connected"
+    global status, StatusOverride
+    StatusOverride := "● BLOCKED - runner not connected"
+    status.Text := StatusOverride
     MsgBox("Screen-template testing is available, but movement execution is not enabled yet. The pattern snippets need a compatible runner and safe-stop handling before Start can run them.", "NectarX", "Icon!")
 }
 
 StopMacro(*) {
-    global status
-    status.Text := "● IDLE - no automation running"
+    global status, StatusOverride
+    StatusOverride := "● IDLE - no automation running"
+    status.Text := StatusOverride
     Send "{w up}{a up}{s up}{d up}{Shift up}{Space up}"
     Log("Stop pressed; common movement keys released.")
 }
