@@ -146,21 +146,23 @@ RefreshPatterns(*) {
 RefreshImages(*) {
     global imageList, ImageDir
     items := []
+    ; Search the dedicated image directory recursively so categorized subfolders work.
     if DirExist(ImageDir) {
-        Loop Files, ImageDir "\*.png", "F"
-            items.Push(A_LoopFileName)
-        Loop Files, ImageDir "\*.bmp", "F"
-            items.Push(A_LoopFileName)
+        Loop Files, ImageDir "\\*.png", "FR"
+            items.Push(SubStr(A_LoopFileFullPath, StrLen(ImageDir) + 2))
+        Loop Files, ImageDir "\\*.bmp", "FR"
+            items.Push(SubStr(A_LoopFileFullPath, StrLen(ImageDir) + 2))
     }
-    ; Also expose the legacy/root-level image library so existing assets are discoverable.
-    Loop Files, A_ScriptDir "\*.png", "F"
+    ; Keep legacy root-level templates discoverable for backwards compatibility.
+    Loop Files, A_ScriptDir "\\*.png", "F"
         items.Push("Root: " A_LoopFileName)
-    Loop Files, A_ScriptDir "\*.bmp", "F"
+    Loop Files, A_ScriptDir "\\*.bmp", "F"
         items.Push("Root: " A_LoopFileName)
+    items.Sort()
     imageList.Delete()
     imageList.Add(items.Length ? items : ["No templates found"])
     imageList.Choose(1)
-    Log("Image template list refreshed (" items.Length " found).")
+    Log("Image template list refreshed (" items.Length " found, including subfolders).")
 }
 
 LoadSettings() {
