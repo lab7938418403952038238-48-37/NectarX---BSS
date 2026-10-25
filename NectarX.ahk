@@ -43,9 +43,14 @@ tabs.UseTab(2)
 main.AddText("x44 y205 w620 h24 c69E7FF", "Gathering nectar")
 main.AddText("x44 y238 w620 h22", "Choose a field, movement method, pattern and gather duration.")
 main.AddText("x44 y274 w130 h22", "Field")
-fieldBox := main.AddDropDownList("x44 y300 w190 Choose1", ["Sunflower", "Dandelion", "Blue Flower", "Mushroom", "Clover", "Bamboo", "Pineapple", "Spider", "Strawberry", "Stump", "Cactus", "Pumpkin", "Rose", "Pine Tree", "Mountain Top", "Coconut", "Pepper"])
+fieldItems := ["Sunflower", "Dandelion", "Blue Flower", "Mushroom", "Clover", "Bamboo", "Pineapple", "Spider", "Strawberry", "Stump", "Cactus", "Pumpkin", "Rose", "Pine Tree", "Mountain Top", "Coconut", "Pepper"]
+fieldBox := main.AddDropDownList("x44 y300 w190 Choose1", fieldItems)
+Loop fieldItems.Length {
+    if fieldItems[A_Index] = settings.field
+        fieldBox.Choose(A_Index)
+}
 main.AddText("x254 y274 w140 h22", "Gather minutes")
-gatherMinutesBox := main.AddEdit("x254 y300 w100 h28 Number", "10")
+gatherMinutesBox := main.AddEdit("x254 y300 w100 h28 Number", settings.gatherMinutes)
 main.AddText("x44 y346 w630 h48 cAAB7D0", "Planned workflow: travel to field, run pattern, gather for selected time, then return/convert when a validated backpack trigger is available. This page is configuration scaffolding; it does not start farming yet.")
 main.AddText("x44 y414 w630 h22 cFFC766", "Farming engine: NOT CONNECTED")
 
@@ -165,13 +170,15 @@ LoadSettings() {
         size: IniRead(ConfigFile, "General", "MovementScale", "1.0"),
         windowTitle: IniRead(ConfigFile, "General", "WindowTitle", "Roblox"),
         variation: IniRead(ConfigFile, "ScreenReader", "Variation", "35"),
-        movementMode: IniRead(ConfigFile, "Movement", "Method", "Walking")
+        movementMode: IniRead(ConfigFile, "Movement", "Method", "Walking"),
+        field: IniRead(ConfigFile, "Farming", "Field", "Sunflower"),
+        gatherMinutes: IniRead(ConfigFile, "Farming", "GatherMinutes", "10")
     }
 }
 
 SaveSettings(*) {
     global ConfigFile, repsBox, sizeBox, repsSettingBox, sizeSettingBox
-    global windowBox, variationBox, movementModeBox
+    global windowBox, variationBox, movementModeBox, fieldBox, gatherMinutesBox
     try reps := Integer(repsSettingBox.Value)
     catch {
         MsgBox("Repetitions must be a whole number.", "NectarX", "Icon!")
@@ -180,6 +187,15 @@ SaveSettings(*) {
     try scale := Number(sizeSettingBox.Value)
     catch {
         MsgBox("Movement scale must be numeric.", "NectarX", "Icon!")
+        return
+    }
+    try gatherMinutes := Integer(gatherMinutesBox.Value)
+    catch {
+        MsgBox("Gather duration must be a whole number.", "NectarX", "Icon!")
+        return
+    }
+    if gatherMinutes < 1 || gatherMinutes > 240 {
+        MsgBox("Gather duration must be between 1 and 240 minutes.", "NectarX", "Icon!")
         return
     }
     try variation := Integer(variationBox.Value)
@@ -204,6 +220,8 @@ SaveSettings(*) {
     IniWrite(Trim(windowBox.Value), ConfigFile, "General", "WindowTitle")
     IniWrite(variation, ConfigFile, "ScreenReader", "Variation")
     IniWrite(movementModeBox.Text = "Cannon" ? "Cannon" : "Walking", ConfigFile, "Movement", "Method")
+    IniWrite(fieldBox.Text, ConfigFile, "Farming", "Field")
+    IniWrite(gatherMinutes, ConfigFile, "Farming", "GatherMinutes")
     repsBox.Value := reps
     sizeBox.Value := scale
     Log("Settings saved.")
