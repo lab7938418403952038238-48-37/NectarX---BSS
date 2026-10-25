@@ -12,6 +12,7 @@ global ConfigFile := A_ScriptDir "\NectarX.ini"
 global LogFile := A_ScriptDir "\NectarX.log"
 global IsRunning := false
 global RobloxHwnd := 0
+global StatusOverride := ""
 
 CoordMode "Pixel", "Screen"
 DirCreate(ImageDir)
@@ -210,7 +211,8 @@ SaveSettings(*) {
 }
 
 DetectRobloxButton(*) {
-    global imageResult
+    global imageResult, StatusOverride
+    StatusOverride := ""
     if DetectRoblox()
         imageResult.Value := "Roblox window detected." Chr(13) Chr(10) "Client bounds: " GetClientBoundsText()
     else
@@ -218,7 +220,7 @@ DetectRobloxButton(*) {
 }
 
 DetectRoblox() {
-    global RobloxHwnd, status, windowStatus, windowBox
+    global RobloxHwnd, status, windowStatus, windowBox, StatusOverride
     RobloxHwnd := WinExist("ahk_exe RobloxPlayerBeta.exe")
     if !RobloxHwnd && windowBox.Value != ""
         RobloxHwnd := WinExist(windowBox.Value)
@@ -226,11 +228,13 @@ DetectRoblox() {
         try title := WinGetTitle("ahk_id " RobloxHwnd)
         catch
             title := "Roblox"
-        status.Text := "● READY - Roblox window detected"
+        if StatusOverride = ""
+            status.Text := "● READY - Roblox window detected"
         windowStatus.Text := "Window: " title " | image matching targets the client area."
         return true
     }
-    status.Text := "● WAITING - Roblox window not found"
+    if StatusOverride = ""
+        status.Text := "● WAITING - Roblox window not found"
     windowStatus.Text := "Open Roblox. Image matching will search only inside the detected client area."
     return false
 }
@@ -288,14 +292,16 @@ TestSelectedImage(*) {
 }
 
 StartMacro(*) {
-    global status
-    status.Text := "● BLOCKED - runner not connected"
+    global status, StatusOverride
+    StatusOverride := "● BLOCKED - runner not connected"
+    status.Text := StatusOverride
     MsgBox("Screen-template testing is available, but movement execution is not enabled yet. The pattern snippets need a compatible runner and safe-stop handling before Start can run them.", "NectarX", "Icon!")
 }
 
 StopMacro(*) {
-    global status
-    status.Text := "● IDLE - no automation running"
+    global status, StatusOverride
+    StatusOverride := "● IDLE - no automation running"
+    status.Text := StatusOverride
     Send "{w up}{a up}{s up}{d up}{Shift up}{Space up}"
     Log("Stop pressed; common movement keys released.")
 }
