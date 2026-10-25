@@ -13,6 +13,7 @@ global LogFile := A_ScriptDir "\NectarX.log"
 global IsRunning := false
 global RobloxHwnd := 0
 
+CoordMode "Pixel", "Screen"
 DirCreate(ImageDir)
 settings := LoadSettings()
 
@@ -182,8 +183,8 @@ DetectRobloxButton(*) {
 DetectRoblox() {
     global RobloxHwnd, status, windowStatus
     RobloxHwnd := WinExist("ahk_exe RobloxPlayerBeta.exe")
-    if !RobloxHwnd
-        RobloxHwnd := WinExist("ahk_exe ApplicationFrameHost.exe")
+    if !RobloxHwnd && windowBox.Value != ""
+        RobloxHwnd := WinExist(windowBox.Value)
     if RobloxHwnd {
         try title := WinGetTitle("ahk_id " RobloxHwnd)
         catch
@@ -236,9 +237,13 @@ TestSelectedImage(*) {
     }
     try {
         WinGetClientPos(&x, &y, &w, &h, "ahk_id " RobloxHwnd)
-        ImageSearch(&fx, &fy, x, y, x+w-1, y+h-1, "*" variation " " imagePath)
-        imageResult.Value := "MATCH FOUND: " imageList.Text Chr(13) Chr(10) "Screen position: " fx ", " fy
-        Log("Image matched: " imageList.Text " at " fx "," fy)
+        if ImageSearch(&fx, &fy, x, y, x+w-1, y+h-1, "*" variation " " imagePath) {
+            imageResult.Value := "MATCH FOUND: " imageList.Text Chr(13) Chr(10) "Screen position: " fx ", " fy
+            Log("Image matched: " imageList.Text " at " fx "," fy)
+        } else {
+            imageResult.Value := "No match found for: " imageList.Text Chr(13) Chr(10) "Try a tighter crop or adjust image variation."
+            Log("Image not found: " imageList.Text)
+        }
     } catch as err {
         imageResult.Value := "No match (or template/search error)." Chr(13) Chr(10) "Template: " imageList.Text Chr(13) Chr(10) err.Message
         Log("Image not matched: " imageList.Text)
