@@ -229,7 +229,7 @@ TestSelectedImage(*) {
         imageResult.Value := "Roblox window not found. Open Roblox before testing image matching."
         return
     }
-    imagePath := ImageDir "\" imageList.Text
+    imagePath := InStr(imageList.Text, "Root: ") = 1 ? A_ScriptDir "\" SubStr(imageList.Text, 7) : ImageDir "\" imageList.Text
     if !FileExist(imagePath) {
         imageResult.Value := "Template file missing: " imagePath
         RefreshImages()
