@@ -47,8 +47,10 @@ main.AddText("x44 y275 w150 h22", "Repetitions")
 repsBox := main.AddEdit("x44 y301 w120 h28 Number", settings.reps)
 main.AddText("x194 y275 w150 h22", "Movement scale")
 sizeBox := main.AddEdit("x194 y301 w120 h28", settings.size)
-main.AddText("x44 y352 w630 h50 cAAB7D0", "The pattern files are snippets that expect shared functions and movement-key variables. They are not safe to execute by themselves yet.")
-main.AddText("x44 y422 w630 h22 cFFC766", "Runner status: NOT CONNECTED")
+main.AddText("x44 y352 w170 h22", "Travel method")
+movementModeBox := main.AddDropDownList("x44 y378 w200 Choose" (settings.movementMode = "Cannon" ? 2 : 1), ["Walking", "Cannon"])
+main.AddText("x44 y416 w630 h42 cAAB7D0", "Walking uses keyboard movement; Cannon selects cannon-based travel where a route supports it. The execution runner is still disabled until helpers and stop handling are validated.")
+main.AddText("x44 y460 w630 h22 cFFC766", "Runner status: NOT CONNECTED")
 
 tabs.UseTab(3)
 main.AddText("x44 y205 w620 h22 c69E7FF", "Image template testing")
@@ -116,6 +118,11 @@ RefreshImages(*) {
         Loop Files, ImageDir "\*.bmp", "F"
             items.Push(A_LoopFileName)
     }
+    ; Also expose the legacy/root-level image library so existing assets are discoverable.
+    Loop Files, A_ScriptDir "\*.png", "F"
+        items.Push("Root: " A_LoopFileName)
+    Loop Files, A_ScriptDir "\*.bmp", "F"
+        items.Push("Root: " A_LoopFileName)
     imageList.Delete()
     imageList.Add(items.Length ? items : ["No templates found"])
     imageList.Choose(1)
@@ -128,13 +135,14 @@ LoadSettings() {
         reps: IniRead(ConfigFile, "General", "Repetitions", "3"),
         size: IniRead(ConfigFile, "General", "MovementScale", "1.0"),
         windowTitle: IniRead(ConfigFile, "General", "WindowTitle", "Roblox"),
-        variation: IniRead(ConfigFile, "ScreenReader", "Variation", "35")
+        variation: IniRead(ConfigFile, "ScreenReader", "Variation", "35"),
+        movementMode: IniRead(ConfigFile, "Movement", "Method", "Walking")
     }
 }
 
 SaveSettings(*) {
     global ConfigFile, repsBox, sizeBox, repsSettingBox, sizeSettingBox
-    global windowBox, variationBox
+    global windowBox, variationBox, movementModeBox
     try reps := Integer(repsSettingBox.Value)
     catch {
         MsgBox("Repetitions must be a whole number.", "NectarX", "Icon!")
@@ -166,6 +174,7 @@ SaveSettings(*) {
     IniWrite(scale, ConfigFile, "General", "MovementScale")
     IniWrite(Trim(windowBox.Value), ConfigFile, "General", "WindowTitle")
     IniWrite(variation, ConfigFile, "ScreenReader", "Variation")
+    IniWrite(movementModeBox.Text = "Cannon" ? "Cannon" : "Walking", ConfigFile, "Movement", "Method")
     repsBox.Value := reps
     sizeBox.Value := scale
     Log("Settings saved.")
@@ -181,7 +190,7 @@ DetectRobloxButton(*) {
 }
 
 DetectRoblox() {
-    global RobloxHwnd, status, windowStatus
+    global RobloxHwnd, status, windowStatus, windowBox
     RobloxHwnd := WinExist("ahk_exe RobloxPlayerBeta.exe")
     if !RobloxHwnd && windowBox.Value != ""
         RobloxHwnd := WinExist(windowBox.Value)
