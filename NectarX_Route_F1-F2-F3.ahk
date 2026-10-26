@@ -3,68 +3,59 @@
 Persistent
 SendMode "Event"
 SetKeyDelay 25, 25
-SetMouseDelay 0
 CoordMode "Pixel", "Screen"
-CoordMode "Mouse", "Screen"
 
-; NectarX route runner — AutoHotkey v2
-; F1 = start / pause / resume
-; F2 = stop route and release all movement keys
-; F3 = exit this script
+; F1 = start (or resume after pausing)
+; F2 = pause / resume
+; F3 = stop route immediately
+; F4 = exit script
 ;
-; Route cycle (repeat up to 6 times):
-; W 4.00s -> D 6.00s -> S 0.75s -> A 0.50s -> A 2.00s
-; wait 2.00s -> search for the hive-claim image.
-; If the image is found, press E once and stop the route.
-;
-; IMPORTANT:
-; - Run Roblox in windowed/borderless mode and keep it in the foreground.
-; - Select the hive-claim screenshot when prompted.
-; - This script does not set Roblox WalkSpeed. Set 32.2 in your own
-;   authorized test environment first; AHK input alone cannot change it.
-; - Mouse movement is intentionally not replayed.
-; - Test in a safe area first. Route timing depends on camera direction,
-;   game state, lag, and whether WalkSpeed is actually 32.2.
+; Six cycles: W 4s, D 6s, S 0.75s, A 0.5s, A 2s,
+; wait 2s, then search the screen for the selected hive image.
+; If found, press E once and stop.
 
 global Running := false
 global Paused := false
 global StopRequested := false
 global RouteBusy := false
 global ClaimImage := ""
-global CycleNumber := 0
 
 ClaimImage := FileSelect(1, A_ScriptDir, "Select the hive-claim screenshot", "Images (*.png; *.bmp; *.jpg; *.jpeg)")
 if (ClaimImage = "") {
     MsgBox "No screenshot selected. The script will exit."
     ExitApp
 }
+TrayTip "F1 start/resume | F2 pause | F3 stop | F4 exit", "NectarX Route Runner", 1
 
-TrayTip "F1 start/pause | F2 stop | F3 exit", "NectarX Route Runner", 1
+F1::StartRoute()
+F2::PauseRoute()
+F3::StopRoute()
+F4::ExitApp()
 
-F1::ToggleRoute()
-F2::StopRoute()
-F3::ExitApp()
-
-ToggleRoute() {
+StartRoute() {
     global Running, Paused, RouteBusy, StopRequested
     if !RouteBusy {
         StopRequested := false
         Running := true
         Paused := false
         RouteBusy := true
-        ToolTip "NectarX: starting route"
-        SetTimer () => ToolTip(), -1200
         SetTimer RunRoute, -10
-        return
+    } else if Running && Paused {
+        Paused := false
+        ToolTip "NectarX: resumed"
+        SetTimer () => ToolTip(), -1000
     }
+}
 
+PauseRoute() {
+    global Running, Paused
     if Running && !Paused {
         Paused := true
         ReleaseMovementKeys()
-        ToolTip "NectarX: PAUSED (F1 resume, F2 stop)"
+        ToolTip "NectarX: PAUSED (F1 or F2 to resume; F3 to stop)"
     } else if Running && Paused {
         Paused := false
-        ToolTip "NectarX: RESUMED"
+        ToolTip "NectarX: resumed"
         SetTimer () => ToolTip(), -1000
     }
 }
@@ -75,56 +66,47 @@ StopRoute() {
     Running := false
     Paused := false
     ReleaseMovementKeys()
-    ToolTip "NectarX: STOPPED (press F1 to start again)"
-    SetTimer () => ToolTip(), -1800
+    ToolTip "NectarX: STOPPED"
+    SetTimer () => ToolTip(), -1500
 }
 
 RunRoute() {
-    global Running, Paused, StopRequested, RouteBusy, CycleNumber, ClaimImage
+    global Running, Paused, StopRequested, RouteBusy, ClaimImage
     try {
         Loop 6 {
-            CycleNumber := A_Index
             if !WaitUntilRunnable()
                 return
-
-            ToolTip "NectarX: cycle " CycleNumber "/6 — W forward 4s"
+            ToolTip "NectarX: cycle " A_Index "/6 — W forward 4s"
             if !HoldKey("w", 4000)
                 return
-
-            ToolTip "NectarX: cycle " CycleNumber "/6 — D right 6s"
+            ToolTip "NectarX: cycle " A_Index "/6 — D right 6s"
             if !HoldKey("d", 6000)
                 return
-
-            ToolTip "NectarX: cycle " CycleNumber "/6 — S backward 0.75s"
+            ToolTip "NectarX: cycle " A_Index "/6 — S backward 0.75s"
             if !HoldKey("s", 750)
                 return
-
-            ToolTip "NectarX: cycle " CycleNumber "/6 — A left 0.5s"
+            ToolTip "NectarX: cycle " A_Index "/6 — A left 0.5s"
             if !HoldKey("a", 500)
                 return
-
-            ToolTip "NectarX: cycle " CycleNumber "/6 — A left 2s"
+            ToolTip "NectarX: cycle " A_Index "/6 — A left 2s"
             if !HoldKey("a", 2000)
                 return
-
             if !InterruptibleSleep(2000)
                 return
 
-            ToolTip "NectarX: cycle " CycleNumber "/6 — checking hive image"
+            ToolTip "NectarX: cycle " A_Index "/6 — checking image"
             if FindClaimImage(ClaimImage) {
                 ReleaseMovementKeys()
                 Send "{e}"
                 Running := false
-                Paused := false
                 StopRequested := true
-                ToolTip "NectarX: hive image found — E pressed, route stopped"
+                ToolTip "NectarX: image found — E pressed; stopped"
                 SetTimer () => ToolTip(), -2500
                 return
             }
         }
-
         if !StopRequested {
-            ToolTip "NectarX: completed all 6 cycles (image not found)"
+            ToolTip "NectarX: completed 6 cycles; image not found"
             SetTimer () => ToolTip(), -2500
         }
     } catch as err {
@@ -139,9 +121,9 @@ RunRoute() {
 }
 
 HoldKey(key, durationMs) {
+    global StopRequested
     if !WaitUntilRunnable()
         return false
-
     Send "{" key " down}"
     startTime := A_TickCount
     try {
@@ -175,7 +157,6 @@ WaitUntilRunnable() {
 }
 
 FindClaimImage(imagePath) {
-    ; Search the full primary screen. *35 allows modest pixel variation.
     try {
         return ImageSearch(&foundX, &foundY, 0, 0, A_ScreenWidth, A_ScreenHeight, "*35 " imagePath)
     } catch as err {
