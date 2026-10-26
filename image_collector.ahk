@@ -254,38 +254,53 @@ ToggleSidebar(*) {
     }
 }
 StartGather(*) {
-    global gatherStatus, timerBox, fieldBox, patternBox, GatherTimerRunning, GatherTimerEndTick
+    global gatherStatus, timerBox, fieldBox, patternBox, hiveSlotBox, bssSpeedBox, GatherTimerRunning, GatherTimerEndTick, GatherPaused, RootDir, macroStateText
+    if GatherTimerRunning {
+        MsgBox("The macro is already running. Press F3 to stop it first.", "NectarX", "Iconi")
+        return
+    }
     if (Trim(timerBox.Value) = "" || !IsNumber(timerBox.Value) || timerBox.Value <= 0 || timerBox.Value > 1440) {
         MsgBox("Enter a field timer from 1 to 1440 minutes.", "NectarX", "Icon!")
         return
     }
-    if GatherTimerRunning {
-        MsgBox("The field timer is already running. Stop it before starting another.", "NectarX", "Iconi")
+    if (Trim(bssSpeedBox.Value) = "" || !IsNumber(bssSpeedBox.Value) || bssSpeedBox.Value < 1 || bssSpeedBox.Value > 200) {
+        MsgBox("Enter your Bee Swarm movement speed (for example, 32.2 with no haste).", "NectarX", "Icon!")
         return
     }
-    minutes := Number(timerBox.Value)
-    GatherTimerEndTick := A_TickCount + Round(minutes * 60000)
+    slot := hiveSlotBox.Value
+    IniWrite(Trim(bssSpeedBox.Value), RootDir "\nectarx_route.ini", "Movement", "BaseSpeed")
+    IniWrite("32.2", RootDir "\nectarx_route.ini", "Movement", "ReferenceSpeed")
+    IniWrite("0", RootDir "\nectarx_route.ini", "Control", "Stop")
+    IniWrite("0", RootDir "\nectarx_route.ini", "Control", "Paused")
+    GatherTimerEndTick := A_TickCount + Round(Number(timerBox.Value) * 60000)
     GatherTimerRunning := true
-    gatherStatus.Text := "Field timer running: " FormatSeconds(Round(minutes * 60)) ". Return-to-hive script will launch when it ends. Gathering movement is not connected yet."
-    LogActivity("Field timer started for " fieldBox.Text " (" patternBox.Text "), " minutes " minute(s).")
+    GatherPaused := false
+    macroStateText.Text := "Starting route to " hiveSlotBox.Text "…"
+    gatherStatus.Text := "Starting " hiveSlotBox.Text ". Timer: " FormatSeconds(Round(Number(timerBox.Value) * 60))
+    LogActivity("Macro started: " fieldBox.Text " / " patternBox.Text "; route to " hiveSlotBox.Text "; speed " bssSpeedBox.Value ".")
+    RunRouteScript("hive_slot_" slot ".ahk")
     SetTimer(GatherTimerTick, 1000)
 }
 GatherTimerTick() {
-    global GatherTimerRunning, GatherTimerEndTick, gatherStatus
+    global GatherTimerRunning, GatherTimerEndTick, GatherPaused, gatherStatus, macroStateText
     if !GatherTimerRunning {
         SetTimer(GatherTimerTick, 0)
         return
     }
-    remaining := Max(0, Ceil((GatherTimerEndTick - A_TickCount) / 1000))
-    if (remaining > 0) {
-        gatherStatus.Text := "Field timer: " FormatSeconds(remaining) ". Return-to-hive script runs at zero. Gathering movement is not connected yet."
+    if GatherPaused
+        return
+    remaining := Ceil((GatherTimerEndTick - A_TickCount) / 1000)
+    if (remaining <= 0) {
+        GatherTimerRunning := false
+        SetTimer(GatherTimerTick, 0)
+        gatherStatus.Text := "Timer finished. Field gathering patterns are not connected yet."
+        macroStateText.Text := "Timer finished."
+        LogActivity("Gather timer finished. Field pattern movement is not connected yet.")
+        IniWrite("1", A_ScriptDir "\nectarx_route.ini", "Control", "Stop")
         return
     }
-    GatherTimerRunning := false
-    SetTimer(GatherTimerTick, 0)
-    gatherStatus.Text := "Timer finished. Launching return-to-hive script…"
-    LogActivity("Field timer finished; launching field_to_hive.ahk.")
-    RunRouteScript("field_to_hive.ahk")
+    gatherStatus.Text := "Timer: " FormatSeconds(remaining) " remaining."
+    macroStateText.Text := "Running — " FormatSeconds(remaining) " remaining."
 }
 FormatSeconds(totalSeconds) {
     totalSeconds := Max(0, totalSeconds)
@@ -293,14 +308,31 @@ FormatSeconds(totalSeconds) {
     secs := Mod(totalSeconds, 60)
     return Format("{:02}:{:02}", mins, secs)
 }
+PauseGather(*) {
+    global GatherPaused, GatherTimerRunning, gatherStatus, macroStateText
+    if !GatherTimerRunning {
+        gatherStatus.Text := "Start the macro first."
+        return
+    }
+    GatherPaused := !GatherPaused
+    IniWrite(GatherPaused ? "1" : "0", A_ScriptDir "\nectarx_route.ini", "Control", "Paused")
+    macroStateText.Text := GatherPaused ? "Paused — F2 resumes, F3 stops." : "Running."
+    gatherStatus.Text := GatherPaused ? "Macro paused." : "Macro resumed."
+    LogActivity(GatherPaused ? "Macro paused." : "Macro resumed.")
+}
 StopGather(*) {
-    global gatherStatus, GatherTimerRunning
+    global gatherStatus, GatherTimerRunning, GatherPaused, macroStateText
     wasRunning := GatherTimerRunning
     GatherTimerRunning := false
+    GatherPaused := false
     SetTimer(GatherTimerTick, 0)
-    gatherStatus.Text := wasRunning ? "Field timer stopped." : "Timer is idle."
-    LogActivity(wasRunning ? "Field timer stopped by user." : "Stop requested while timer was idle.")
+    IniWrite("1", A_ScriptDir "\nectarx_route.ini", "Control", "Stop")
+    IniWrite("0", A_ScriptDir "\nectarx_route.ini", "Control", "Paused")
+    gatherStatus.Text := wasRunning ? "Macro stopped." : "Macro is idle."
+    macroStateText.Text := "Macro idle."
+    LogActivity(wasRunning ? "Macro stopped by user." : "Stop requested while idle.")
 }
+
 SaveSettings(*) {
     global RootDir, speedBox, gameBox, detectBox, cameraBox, scanRateBox, tokenImageBox, hasteFolderBox, aiTokenFolderBox, routesFolderBox, settingsStatus
     speed := Trim(speedBox.Value)
