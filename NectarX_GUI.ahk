@@ -11,8 +11,9 @@ CoordMode "Pixel", "Screen"
 ; Mouse movement/clicks are intentionally ignored.
 
 Running := false, Paused := false, StopRequested := false, RouteBusy := false
-global ClaimImage := "", RouteCycles := 6
- global ConfigFile := A_ScriptDir "\\NectarX.ini", LogControl := ""
+ClaimImage := "", RouteCycles := 6
+ConfigFile := A_ScriptDir "\NectarX.ini"
+LogControl := ""
 try {
     ClaimImage := IniRead(ConfigFile, "Route", "ClaimImage", "")
     RouteCycles := Integer(IniRead(ConfigFile, "Route", "Cycles", "6"))
