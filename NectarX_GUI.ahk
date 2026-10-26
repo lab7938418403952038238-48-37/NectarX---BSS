@@ -247,8 +247,17 @@ RunRoute() {
 }
 
 WaitForRecordingTime(cycleStart, targetMs) {
-    global StopRequested, ClaimImage
-    while (A_TickCount - cycleStart < targetMs) {
+    global StopRequested, ClaimImage, Paused
+    loop {
+        ; Freeze the recorded route clock while paused so the timing does not skip ahead.
+        if Paused {
+            pauseStart := A_TickCount
+            if !WaitUntilRunnable()
+                return false
+            cycleStart += A_TickCount - pauseStart
+        }
+        if (A_TickCount - cycleStart >= targetMs)
+            break
         if !WaitUntilRunnable()
             return false
         if FindClaimImage(ClaimImage) {
