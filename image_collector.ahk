@@ -10,6 +10,8 @@ global CurrentImage := ""
 global ActivityLog := "NectarX started."
 global WebhookPath := RootDir "\nectarx_webhook.txt"
 global WebhookUrl := ""
+global HoneySession := 0
+global SessionStartTick := A_TickCount
 
 main := Gui("+Resize", "NectarX")
 main.BackColor := "55585D"
@@ -67,13 +69,17 @@ statusTitle.SetFont("s16 Bold", "Segoe UI")
 activityLabel := main.AddText("x105 y128 w470 h22 cEEEEEE", "Current activity")
 activityText := main.AddText("x105 y151 w470 h30 cFFFFFF", "Ready")
 logLabel := main.AddText("x105 y188 w470 h22 cEEEEEE", "Recent activity")
-activityBox := main.AddEdit("x105 y211 w470 h105 ReadOnly -Wrap")
-webhookLabel := main.AddText("x105 y332 w470 h22 cEEEEEE", "Discord webhook URL")
-webhookBox := main.AddEdit("x105 y356 w470 h28 Password")
-webhookEnable := main.AddCheckbox("x105 y392 w260 h24", "Send activity updates to Discord")
-saveWebhookBtn := main.AddButton("x105 y428 w135 h36", "Save")
-testWebhookBtn := main.AddButton("x255 y428 w135 h36", "Test")
-webhookStatus := main.AddText("x400 y433 w175 h24 cEEEEEE", "")
+activityBox := main.AddEdit("x105 y211 w470 h72 ReadOnly -Wrap")
+honeyLabel := main.AddText("x105 y289 w165 h22 cEEEEEE", "Honey made this session")
+honeyBox := main.AddEdit("x270 y286 w135 h26 Number", "0")
+updateHoneyBtn := main.AddButton("x420 y285 w155 h28", "Update stats")
+honeyStatsText := main.AddText("x105 y316 w470 h24 c8CCBFF", "0 honey/s  |  0 honey/min  |  0 honey/hour")
+webhookLabel := main.AddText("x105 y343 w470 h22 cEEEEEE", "Discord webhook URL")
+webhookBox := main.AddEdit("x105 y365 w470 h26 Password")
+webhookEnable := main.AddCheckbox("x105 y394 w280 h24", "Send activity updates to Discord")
+saveWebhookBtn := main.AddButton("x105 y424 w135 h32", "Save")
+testWebhookBtn := main.AddButton("x255 y424 w135 h32", "Test")
+webhookStatus := main.AddText("x400 y430 w175 h24 cEEEEEE", "")
 webhookBox.ToolTip := "Paste a Discord webhook URL. Keep it private."
 ; Images tab retains the screenshot/template collector.
 imagesPage := main.AddGroupBox("x82 y72 w550 h450", "")
@@ -105,6 +111,7 @@ saveSettingsBtn.OnEvent("Click", SaveSettings)
 resetSettingsBtn.OnEvent("Click", ResetSettings)
 saveWebhookBtn.OnEvent("Click", SaveWebhook)
 testWebhookBtn.OnEvent("Click", TestWebhook)
+updateHoneyBtn.OnEvent("Click", UpdateHoneyStats)
 main.OnEvent("Close", (*) => ExitApp())
 LoadSettings()
 LoadWebhook()
@@ -116,14 +123,14 @@ ShowPage(page) {
     global gatherPage, gatherTitle, fieldLabel, fieldBox, patternLabel, patternBox, durationLabel, durationBox, repeatLabel, repeatBox, startBtn, stopBtn, gatherStatus
     global settingsPage, settingsTitle, speedLabel, speedBox, speedHint, gameLabel, gameBox, detectLabel, detectBox, cameraLabel, cameraBox, saveSettingsBtn, resetSettingsBtn, settingsStatus
     global imagesPage, imagesTitle, categoryBox, nameBox, captureBtn, chooseBtn, clipBtn, saveBtn, statusText
-    global statusPage, statusTitle, activityLabel, activityText, logLabel, activityBox, webhookLabel, webhookBox, webhookEnable, saveWebhookBtn, testWebhookBtn, webhookStatus
+    global statusPage, statusTitle, activityLabel, activityText, logLabel, activityBox, honeyLabel, honeyBox, updateHoneyBtn, honeyStatsText, webhookLabel, webhookBox, webhookEnable, saveWebhookBtn, testWebhookBtn, webhookStatus
     for c in [gatherPage,gatherTitle,fieldLabel,fieldBox,patternLabel,patternBox,durationLabel,durationBox,repeatLabel,repeatBox,startBtn,stopBtn,gatherStatus]
         c.Visible := page = "gather"
     for c in [settingsPage,settingsTitle,speedLabel,speedBox,speedHint,gameLabel,gameBox,detectLabel,detectBox,cameraLabel,cameraBox,saveSettingsBtn,resetSettingsBtn,settingsStatus]
         c.Visible := page = "settings"
     for c in [imagesPage,imagesTitle,categoryBox,nameBox,captureBtn,chooseBtn,clipBtn,saveBtn,statusText]
         c.Visible := page = "images"
-    for c in [statusPage,statusTitle,activityLabel,activityText,logLabel,activityBox,webhookLabel,webhookBox,webhookEnable,saveWebhookBtn,testWebhookBtn,webhookStatus]
+    for c in [statusPage,statusTitle,activityLabel,activityText,logLabel,activityBox,honeyLabel,honeyBox,updateHoneyBtn,honeyStatsText,webhookLabel,webhookBox,webhookEnable,saveWebhookBtn,testWebhookBtn,webhookStatus]
         c.Visible := page = "status"
     if (page = "status")
         RefreshActivity()
@@ -219,9 +226,10 @@ LogActivity(message) {
     SendWebhook(message)
 }
 RefreshActivity() {
-    global ActivityLog, activityBox, activityText
+    global ActivityLog, activityBox, activityText, honeyStatsText
     try activityBox.Value := ActivityLog
     try activityText.Text := StrSplit(ActivityLog, Chr(13) Chr(10))[1]
+    try honeyStatsText.Text := StatsSummary()
 }
 LoadWebhook() {
     global WebhookPath, WebhookUrl, webhookBox
@@ -264,20 +272,62 @@ TestWebhook(*) {
     }
 }
 SendWebhook(message, force := false) {
-    global WebhookUrl, webhookEnable
+    global WebhookUrl, webhookEnable, HoneySession
     if (Trim(WebhookUrl) = "")
         return false
     if (!force && !webhookEnable.Value)
         return false
     try {
+        elapsed := Max(1, (A_TickCount - SessionStartTick) / 1000)
+        perSec := HoneySession / elapsed
+        perMin := perSec * 60
+        perHour := perSec * 3600
+        graph := BuildHoneyGraph(perSec, perMin, perHour)
+        description := "**Session honey:** " FormatHoney(HoneySession) "`n" 
+            . "**Honey / second:** " FormatHoney(perSec) "`n"
+            . "**Honey / minute:** " FormatHoney(perMin) "`n"
+            . "**Average / hour:** " FormatHoney(perHour) "`n`n"
+            . "```text`n" graph "`n```"
+            . "`n**Activity:** " message
+        body := "{""embeds"":[{""title"":""NectarX | Honey Analytics"",""description"":""" JsonEscape(description) """,""color"":16023039,""footer"":{""text"":""NectarX • This session""}}]}"
         request := ComObject("WinHttp.WinHttpRequest.5.1")
         request.Open("POST", WebhookUrl, false)
         request.SetRequestHeader("Content-Type", "application/json")
-        request.Send("{""content"":""" JsonEscape("**NectarX** · " message) """}")
+        request.Send(body)
         return request.Status >= 200 && request.Status < 300
     } catch {
         return false
     }
+}
+UpdateHoneyStats(*) {
+    global honeyBox, HoneySession
+    value := Trim(honeyBox.Value)
+    if (value = "" || !IsNumber(value) || value < 0) {
+        MsgBox("Enter a valid non-negative honey amount.", "NectarX", "Icon!")
+        return
+    }
+    HoneySession := value + 0
+    RefreshActivity()
+    LogActivity("Session honey total updated to " FormatHoney(HoneySession) ".")
+}
+StatsSummary() {
+    global HoneySession, SessionStartTick
+    elapsed := Max(1, (A_TickCount - SessionStartTick) / 1000)
+    perSec := HoneySession / elapsed
+    return FormatHoney(perSec) " honey/s  |  " FormatHoney(perSec * 60) " honey/min  |  " FormatHoney(perSec * 3600) " honey/hour"
+}
+BuildHoneyGraph(perSec, perMin, perHour) {
+    maxVal := Max(perSec, perMin, perHour, 1)
+    return "HONEY / SEC  " Bar(perSec, maxVal) " " FormatHoney(perSec) "`n"
+        . "HONEY / MIN  " Bar(perMin, maxVal) " " FormatHoney(perMin) "`n"
+        . "HONEY / HOUR " Bar(perHour, maxVal) " " FormatHoney(perHour)
+}
+Bar(value, maxVal) {
+    length := Round((value / maxVal) * 14)
+    return StrReplace(Format("{:" length "}", ""), " ", "█")
+}
+FormatHoney(value) {
+    return Format("{:,.2f}", value)
 }
 
 CaptureScreen(*) {
