@@ -32,6 +32,12 @@ global AIOverlayTimer := 0
 global RouteScriptsFolder := ""
 global GatherPaused := false
 global ActiveRoutePid := 0
+global DiagnosticRecording := false
+global DiagnosticPid := 0
+global DiagnosticFile := ""
+global DiagnosticStartedAt := 0
+global FFmpegPath := "ffmpeg.exe"
+global DiagnosticMaxSeconds := 120
 
 main := Gui("+Resize", "NectarX")
 main.BackColor := "55585D"
@@ -47,7 +53,8 @@ imagesTab := main.AddButton("x9 y227 w46 h44", "▧")
 statusTab := main.AddButton("x9 y281 w46 h44", "◷")
 visionTab := main.AddButton("x9 y335 w46 h44", "◎")
 routesTab := main.AddButton("x9 y389 w46 h44", "⌂")
-gatherTab.ToolTip := "Gather", settingsTab.ToolTip := "Settings", imagesTab.ToolTip := "Images", statusTab.ToolTip := "Status", visionTab.ToolTip := "Screen reader", routesTab.ToolTip := "Hive & routes"
+diagnosticTab := main.AddButton("x9 y443 w46 h44", "▣")
+gatherTab.ToolTip := "Gather", settingsTab.ToolTip := "Settings", imagesTab.ToolTip := "Images", statusTab.ToolTip := "Status", visionTab.ToolTip := "Screen reader", routesTab.ToolTip := "Hive & routes", diagnosticTab.ToolTip := "Diagnostic recorder"
 
 ; Gather tab
 gatherPage := main.AddGroupBox("x82 y72 w550 h450", "")
@@ -138,6 +145,19 @@ aiGatherStatus := main.AddText("x105 y448 w470 h22 cEEEEEE", "Bottom-half scan. 
  }
  routesStatus := main.AddText("x105 y448 w470 h22 cD0D0D0", "Idle. F8 stops AI gathering; route scripts have their own F8 stop.")
 
+; Diagnostic tab: record the Roblox window, then commit the clip to the GitHub repository.
+diagnosticPage := main.AddGroupBox("x82 y72 w550 h450", "")
+diagnosticTitle := main.AddText("x105 y91 w490 h30 cF0F0F0", "▣  Diagnostic recorder")
+diagnosticTitle.SetFont("s16 Bold", "Segoe UI")
+diagnosticInfo := main.AddText("x105 y135 w470 h58 cEEEEEE", "Record the Roblox window to an MP4. Press 0 while Roblox is active, or use the button below. Press 0 again to stop and upload the clip to GitHub.")
+diagnosticFfmpegLabel := main.AddText("x105 y205 w470 h22 cEEEEEE", "FFmpeg executable (required for MP4 recording)")
+diagnosticFfmpegBox := main.AddEdit("x105 y230 w365 h26 ReadOnly", "ffmpeg.exe (PATH)")
+diagnosticFfmpegBtn := main.AddButton("x480 y229 w95 h28", "Browse")
+diagnosticRecordBtn := main.AddButton("x105 y280 w220 h42", "● Record (0)")
+diagnosticOpenBtn := main.AddButton("x345 y280 w220 h42", "Open recordings folder")
+diagnosticStatus := main.AddText("x105 y335 w470 h55 cD0D0D0", "Ready. Recording is limited to 120 seconds per clip. Audio is not recorded.")
+diagnosticUploadNote := main.AddText("x105 y400 w470 h48 cD0D0D0", "Upload requires this script to be inside a cloned NectarX Git repo with Git installed and push access configured. Large clips may be rejected by GitHub.")
+
 ; Status tab: current activity, event history, and Discord notification settings.
 statusPage := main.AddGroupBox("x82 y72 w550 h450", "")
 statusTitle := main.AddText("x105 y91 w490 h30 cF0F0F0", "◷")
@@ -181,11 +201,15 @@ chooseBtn.OnEvent("Click", ChooseImage)
 clipBtn.OnEvent("Click", SaveClipboardImage)
 saveBtn.OnEvent("Click", SaveImage)
 gatherTab.OnEvent("Click", (*) => ShowPage("gather"))
+diagnosticTab.OnEvent("Click", (*) => ShowPage("diagnostic"))
 settingsTab.OnEvent("Click", (*) => ShowPage("settings"))
 imagesTab.OnEvent("Click", (*) => ShowPage("images"))
 statusTab.OnEvent("Click", (*) => ShowPage("status"))
 visionTab.OnEvent("Click", (*) => ShowPage("vision"))
 routesTab.OnEvent("Click", (*) => ShowPage("routes"))
+diagnosticFfmpegBtn.OnEvent("Click", ChooseFFmpeg)
+diagnosticRecordBtn.OnEvent("Click", ToggleDiagnosticRecording)
+diagnosticOpenBtn.OnEvent("Click", OpenDiagnosticFolder)
 routesFolderBtn.OnEvent("Click", ChooseRouteScriptsFolder)
 spawnHive1Btn.OnEvent("Click", (*) => RunRouteScript("hive_slot_1.ahk"))
 toggleBtn.OnEvent("Click", ToggleSidebar)
@@ -212,6 +236,10 @@ Hotkey("F8", StopAIGather)
 Hotkey("F1", StartGather)
 Hotkey("F2", PauseGather)
 Hotkey("F3", StopGather)
+; The 0 key toggles recording only while the Roblox client is the active window.
+HotIfWinActive("ahk_exe RobloxPlayerBeta.exe")
+Hotkey("0", ToggleDiagnosticRecording)
+HotIfWinActive()
 LoadSettings()
 LoadWebhook()
 LogActivity("NectarX ready. AI gathering uses visible image templates and approximate screen-relative movement.")
@@ -225,6 +253,7 @@ ShowPage(page) {
     global visionPage, visionTitle, tokenImageLabel, tokenImageBox, tokenImageBtn, hasteFolderLabel, hasteFolderBox, hasteFolderBtn, visionStartBtn, visionStopBtn, visionStatus, visionRuleText, aiGatherTitle, aiTokenFolderLabel, aiTokenFolderBox, aiTokenFolderBtn, aiGatherStartBtn, aiGatherStopBtn, aiGatherStatus
     global statusPage, statusTitle, activityLabel, activityText, logLabel, activityBox, honeyLabel, honeyBox, updateHoneyBtn, honeyStatsText, webhookLabel, webhookBox, webhookEnable, saveWebhookBtn, testWebhookBtn, webhookStatus, statusStartBtn, statusPauseBtn, statusStopBtn, macroStateText
     global routesPage, routesTitle, routesFolderLabel, routesFolderBox, routesFolderBtn, routesInfo, routesStatus, routeButtons, spawnHive1Btn
+    global diagnosticPage, diagnosticTitle, diagnosticInfo, diagnosticFfmpegLabel, diagnosticFfmpegBox, diagnosticFfmpegBtn, diagnosticRecordBtn, diagnosticOpenBtn, diagnosticStatus, diagnosticUploadNote, diagnosticTab
     for c in [gatherPage,gatherTitle,fieldLabel,fieldBox,patternLabel,patternBox,timerLabel,timerBox,hiveSlotLabel,hiveSlotBox,bssSpeedLabel,bssSpeedBox,bssSpeedHint,startBtn,stopBtn,pauseGatherBtn,gatherStatus]
         c.Visible := page = "gather"
     for c in [settingsPage,settingsTitle,speedLabel,speedBox,speedHint,gameLabel,gameBox,detectLabel,detectBox,cameraLabel,cameraBox,scanRateLabel,scanRateBox,scanRateHint,saveSettingsBtn,resetSettingsBtn,settingsStatus]
@@ -235,6 +264,8 @@ ShowPage(page) {
     routesTitle.Visible := page = "routes", routesFolderLabel.Visible := page = "routes", routesFolderBox.Visible := page = "routes", routesFolderBtn.Visible := page = "routes", routesInfo.Visible := page = "routes", spawnHive1Btn.Visible := page = "routes", routesStatus.Visible := page = "routes"
     for c in routeButtons
         c.Visible := page = "routes"
+    for c in [diagnosticPage,diagnosticTitle,diagnosticInfo,diagnosticFfmpegLabel,diagnosticFfmpegBox,diagnosticFfmpegBtn,diagnosticRecordBtn,diagnosticOpenBtn,diagnosticStatus,diagnosticUploadNote]
+        c.Visible := page = "diagnostic"
     for c in [imagesPage,imagesTitle,categoryBox,nameBox,captureBtn,chooseBtn,clipBtn,saveBtn,statusText]
         c.Visible := page = "images"
     for c in [statusPage,statusTitle,activityLabel,activityText,logLabel,activityBox,honeyLabel,honeyBox,updateHoneyBtn,honeyStatsText,webhookLabel,webhookBox,webhookEnable,saveWebhookBtn,testWebhookBtn,webhookStatus,statusStartBtn,statusPauseBtn,statusStopBtn,macroStateText]
@@ -249,12 +280,13 @@ ToggleSidebar(*) {
     if expanded {
         sidebar.Move(0,66,150,470), toggleBtn.Move(105,74,34,30)
         gatherTab.Move(12,119,126,44), settingsTab.Move(12,173,126,44), imagesTab.Move(12,227,126,44), statusTab.Move(12,281,126,44), visionTab.Move(12,335,126,44)
-        gatherTab.Text := "◈  Gather", settingsTab.Text := "⚙  Settings", imagesTab.Text := "▧  Images", statusTab.Text := "◷  Status", visionTab.Text := "◎  Vision"
+        gatherTab.Move(12,443,126,44)
+        gatherTab.Text := "◈  Gather", settingsTab.Text := "⚙  Settings", imagesTab.Text := "▧  Images", statusTab.Text := "◷  Status", visionTab.Text := "◎  Vision", diagnosticTab.Text := "▣  Diagnose"
         toggleBtn.Text := "‹", main.Show("w740")
     } else {
         sidebar.Move(0,66,64,470), toggleBtn.Move(15,74,34,30)
-        gatherTab.Move(9,119,46,44), settingsTab.Move(9,173,46,44), imagesTab.Move(9,227,46,44), statusTab.Move(9,281,46,44), visionTab.Move(9,335,46,44)
-        gatherTab.Text := "◈", settingsTab.Text := "⚙", imagesTab.Text := "▧", statusTab.Text := "◷", visionTab.Text := "◎"
+        gatherTab.Move(9,119,46,44), settingsTab.Move(9,173,46,44), imagesTab.Move(9,227,46,44), statusTab.Move(9,281,46,44), visionTab.Move(9,335,46,44), diagnosticTab.Move(9,443,46,44)
+        gatherTab.Text := "◈", settingsTab.Text := "⚙", imagesTab.Text := "▧", statusTab.Text := "◷", visionTab.Text := "◎", diagnosticTab.Text := "▣"
         toggleBtn.Text := "›", main.Show("w650")
     }
 }
@@ -546,6 +578,9 @@ StartAIGather(*) {
     AIGatherTick()
 }
 ShutdownNectarX(*) {
+    global DiagnosticRecording
+    if DiagnosticRecording
+        StopDiagnosticRecording()
     StopAIGather()
     StopVision()
     ExitApp()
@@ -889,6 +924,165 @@ Bar(value, maxVal, width := 16) {
 }
 FormatHoney(value) {
     return Format("{:,.2f}", value)
+}
+
+ChooseFFmpeg(*) {
+    global FFmpegPath, diagnosticFfmpegBox
+    path := FileSelect(1, , "Choose ffmpeg.exe", "FFmpeg executable (ffmpeg.exe)")
+    if (path = "")
+        return
+    SplitPath(path, &fileName)
+    if (StrLower(fileName) != "ffmpeg.exe") {
+        MsgBox("Please select ffmpeg.exe.", "NectarX", "Icon!")
+        return
+    }
+    FFmpegPath := path
+    diagnosticFfmpegBox.Value := path
+}
+
+ToggleDiagnosticRecording(*) {
+    global DiagnosticRecording
+    if DiagnosticRecording
+        StopDiagnosticRecording()
+    else
+        StartDiagnosticRecording()
+}
+
+StartDiagnosticRecording() {
+    global RootDir, FFmpegPath, DiagnosticRecording, DiagnosticPid, DiagnosticFile, DiagnosticStartedAt
+    global diagnosticStatus, diagnosticRecordBtn, diagnosticFfmpegBox, DiagnosticMaxSeconds
+    if DiagnosticRecording
+        return
+    if !WinExist("ahk_exe RobloxPlayerBeta.exe") && !WinExist("Roblox") {
+        diagnosticStatus.Text := "Roblox window not found. Open Bee Swarm Simulator first."
+        return
+    }
+    if (FFmpegPath = "ffmpeg.exe") {
+        diagnosticFfmpegBox.Value := "ffmpeg.exe (PATH)"
+        check := RunWait(A_ComSpec ' /c where ffmpeg.exe >nul 2>&1', , "Hide")
+        if (check != 0) {
+            diagnosticStatus.Text := "FFmpeg not found. Install FFmpeg or click Browse to select ffmpeg.exe."
+            MsgBox("NectarX needs ffmpeg.exe to record MP4 video. Install FFmpeg and add it to PATH, or choose ffmpeg.exe with Browse.", "NectarX Diagnostic", "Icon!")
+            return
+        }
+    } else if !FileExist(FFmpegPath) {
+        diagnosticStatus.Text := "The selected ffmpeg.exe path no longer exists."
+        return
+    }
+    hwnd := WinExist("ahk_exe RobloxPlayerBeta.exe")
+    if !hwnd
+        hwnd := WinExist("Roblox")
+    try {
+        WinGetTitle(&windowTitle, "ahk_id " hwnd)
+        if (Trim(windowTitle) = "")
+            throw Error("Roblox window has no title.")
+        folder := RootDir "\diagnostics"
+        DirCreate(folder)
+        DiagnosticFile := folder "\nectarx-diagnostic-" FormatTime(, "yyyyMMdd-HHmmss") ".mp4"
+        args := '"' FFmpegPath '" -y -hide_banner -loglevel error -f gdigrab -framerate 10 -i title="' windowTitle '" -t ' DiagnosticMaxSeconds ' -vf "scale=1280:-2" -an -c:v libx264 -preset ultrafast -crf 30 -pix_fmt yuv420p -movflags +frag_keyframe+empty_moov "' DiagnosticFile '"'
+        Run(args, RootDir, "Hide", &DiagnosticPid)
+        Sleep(700)
+        if !ProcessExist(DiagnosticPid) {
+            DiagnosticPid := 0
+            throw Error("FFmpeg did not start. Check that this FFmpeg build supports gdigrab and libx264.")
+        }
+        DiagnosticRecording := true
+        DiagnosticStartedAt := A_TickCount
+        diagnosticRecordBtn.Text := "■ Stop recording (0)"
+        diagnosticStatus.Text := "Recording Roblox window… press 0 again to stop. Maximum 120 seconds; no audio."
+        SetTimer(DiagnosticLimitTick, 500)
+        LogActivity("Diagnostic screen recording started.")
+    } catch as err {
+        DiagnosticRecording := false
+        DiagnosticPid := 0
+        diagnosticStatus.Text := "Could not start recording: " err.Message
+        MsgBox("Diagnostic recording could not start: " err.Message, "NectarX", "Iconx")
+    }
+}
+
+DiagnosticLimitTick() {
+    global DiagnosticRecording, DiagnosticStartedAt, DiagnosticMaxSeconds, diagnosticStatus
+    if !DiagnosticRecording
+        return
+    remaining := DiagnosticMaxSeconds - Floor((A_TickCount - DiagnosticStartedAt) / 1000)
+    if (remaining <= 0) {
+        diagnosticStatus.Text := "Maximum recording length reached. Finalizing and uploading…"
+        StopDiagnosticRecording()
+    } else if (Mod(remaining, 10) = 0) {
+        diagnosticStatus.Text := "Recording Roblox window… " remaining " seconds remaining. Press 0 to stop."
+    }
+}
+
+StopDiagnosticRecording() {
+    global RootDir, DiagnosticRecording, DiagnosticPid, DiagnosticFile, DiagnosticStartedAt
+    global diagnosticStatus, diagnosticRecordBtn
+    if !DiagnosticRecording
+        return
+    DiagnosticRecording := false
+    SetTimer(DiagnosticLimitTick, 0)
+    pid := DiagnosticPid
+    DiagnosticPid := 0
+    diagnosticRecordBtn.Text := "● Record (0)"
+    diagnosticStatus.Text := "Stopping recorder and preparing the clip…"
+    if (pid && ProcessExist(pid))
+        ProcessClose(pid)
+    Sleep(1200)
+    if !FileExist(DiagnosticFile) {
+        diagnosticStatus.Text := "No video file was created. Check FFmpeg and the Roblox window."
+        return
+    }
+    sizeMB := Round(FileGetSize(DiagnosticFile) / 1024 / 1024, 2)
+    elapsed := Round((A_TickCount - DiagnosticStartedAt) / 1000)
+    LogActivity("Diagnostic recording saved locally (" elapsed "s, " sizeMB " MB).")
+    diagnosticStatus.Text := "Saved locally (" sizeMB " MB). Trying GitHub upload…"
+    UploadDiagnosticToGitHub()
+}
+
+UploadDiagnosticToGitHub() {
+    global RootDir, DiagnosticFile, diagnosticStatus
+    try {
+        repoCheck := RunWait(A_ComSpec ' /c git -C "' RootDir '" rev-parse --is-inside-work-tree >nul 2>&1', , "Hide")
+        if (repoCheck != 0) {
+            diagnosticStatus.Text := "Video saved in diagnostics. Git repo not detected here; copy it to your cloned repo to upload."
+            return
+        }
+        remoteCheck := RunWait(A_ComSpec ' /c git -C "' RootDir '" remote get-url origin >nul 2>&1', , "Hide")
+        if (remoteCheck != 0) {
+            diagnosticStatus.Text := "Video saved locally, but no GitHub origin remote is configured."
+            return
+        }
+        stagedCheck := RunWait(A_ComSpec ' /c git -C "' RootDir '" diff --cached --quiet', , "Hide")
+        if (stagedCheck != 0) {
+            diagnosticStatus.Text := "Video saved locally. Upload skipped because other files are already staged in Git."
+            return
+        }
+        SplitPath(DiagnosticFile, &fileName)
+        relativePath := "diagnostics/" fileName
+        addCode := RunWait(A_ComSpec ' /c git -C "' RootDir '" add -- "' relativePath '"', , "Hide")
+        if (addCode != 0)
+            throw Error("Git could not stage the diagnostic video.")
+        commitCode := RunWait(A_ComSpec ' /c git -C "' RootDir '" commit -m "Add NectarX diagnostic recording"', , "Hide")
+        if (commitCode != 0) {
+            RunWait(A_ComSpec ' /c git -C "' RootDir '" reset -- "' relativePath '"', , "Hide")
+            throw Error("Git commit failed. Check Git identity and that the video is below GitHub's 100 MB file limit.")
+        }
+        pushCode := RunWait(A_ComSpec ' /c git -C "' RootDir '" push origin HEAD:main', , "Hide")
+        if (pushCode != 0) {
+            diagnosticStatus.Text := "Video committed locally but push failed. Run git push from this folder after checking GitHub login."
+            return
+        }
+        diagnosticStatus.Text := "Uploaded to GitHub: " relativePath
+        LogActivity("Diagnostic video uploaded to GitHub: " relativePath)
+    } catch as err {
+        diagnosticStatus.Text := "Saved locally; GitHub upload failed: " err.Message
+    }
+}
+
+OpenDiagnosticFolder(*) {
+    global RootDir
+    folder := RootDir "\diagnostics"
+    DirCreate(folder)
+    Run('explorer.exe "' folder '" ')
 }
 
 CaptureScreen(*) {
