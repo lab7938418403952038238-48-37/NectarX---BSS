@@ -66,7 +66,7 @@ Countdown(seconds) {
     return !RouteStopped
 }
 WalkFor(key, baseDurationMs) {
-    global RouteStopped, RouteHeldKey, TimeScale
+    global RouteStopped, RouteHeldKey, TimeScale, RoutePausedMs
     durationMs := Round(baseDurationMs * TimeScale)
     RouteHeldKey := key
     Send("{" key " down}")
@@ -86,7 +86,7 @@ WalkFor(key, baseDurationMs) {
     return !RouteStopped
 }
 CheckControl() {
-    global RouteStopped, ConfigPath
+    global RouteStopped, ConfigPath, RoutePausedMs
     if (IniRead(ConfigPath, "Control", "Stop", "0") = "1") {
         RouteStopped := true
         ReleaseMovement()
