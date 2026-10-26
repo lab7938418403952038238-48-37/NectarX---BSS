@@ -12,6 +12,16 @@ CoordMode "Pixel", "Screen"
 
 global Running := false, Paused := false, StopRequested := false, RouteBusy := false
 global ClaimImage := "", RouteCycles := 6
+ global ConfigFile := A_ScriptDir "\\NectarX.ini", LogControl := ""
+try {
+    ClaimImage := IniRead(ConfigFile, "Route", "ClaimImage", "")
+    RouteCycles := Integer(IniRead(ConfigFile, "Route", "Cycles", "6"))
+    if (RouteCycles < 1 || RouteCycles > 20)
+        RouteCycles := 6
+} catch {
+    ClaimImage := ""
+    RouteCycles := 6
+}
 global CycleEdit := "", StatusControl := "", CycleStatusControl := "", ImagePathControl := ""
 global StartButton := "", PauseButton := "", StopButton := "", MainGui := ""
 
@@ -22,7 +32,7 @@ MainGui.AddText("x24 y18 w330 h34 c67E8B7 +0x200", "NECTARX")
 MainGui.SetFont("s9 c9AA8B8", "Segoe UI")
 MainGui.AddText("x150 y26 w500 h24 +0x200", "BEE SWARM SIMULATOR  /  LIGHTWEIGHT MACRO")
 
-tabs := MainGui.AddTab3("x20 y66 w720 h365", ["Dashboard", "Route & Detection", "Settings"])
+tabs := MainGui.AddTab3("x20 y66 w720 h410", ["Dashboard", "Route & Detection", "Settings"])
 
 tabs.UseTab(1)
 MainGui.SetFont("s15 bold cE8EDF5", "Segoe UI")
@@ -33,9 +43,10 @@ MainGui.AddText("x44 y190 w150 h22", "CURRENT STATUS")
 StatusControl := MainGui.AddText("x44 y215 w650 h35 cF2C879 +0x200", "Ready — select a hive screenshot")
 MainGui.AddText("x44 y267 w150 h22", "ROUTE PROGRESS")
 CycleStatusControl := MainGui.AddText("x44 y292 w650 h26 cE8EDF5 +0x200", "Waiting to start")
-StartButton := MainGui.AddButton("x44 y340 w150 h38", "Start (F1)")
-PauseButton := MainGui.AddButton("x210 y340 w150 h38 Disabled", "Pause (F2)")
-StopButton := MainGui.AddButton("x376 y340 w150 h38 Disabled", "Stop (F3)")
+LogControl := MainGui.AddEdit("x44 y322 w650 h58 ReadOnly -Wrap", "NectarX ready. Choose your screenshot to begin.")
+StartButton := MainGui.AddButton("x44 y395 w150 h38", "Start (F1)")
+PauseButton := MainGui.AddButton("x210 y395 w150 h38 Disabled", "Pause (F2)")
+StopButton := MainGui.AddButton("x376 y395 w150 h38 Disabled", "Stop (F3)")
 StartButton.OnEvent("Click", (*) => StartRoute())
 PauseButton.OnEvent("Click", (*) => PauseRoute())
 StopButton.OnEvent("Click", (*) => StopRoute())
@@ -50,7 +61,7 @@ ImagePathControl := MainGui.AddText("x44 y216 w520 h36 c9AA8B8", "No screenshot 
 pickButton := MainGui.AddButton("x570 y211 w130 h34", "Choose image...")
 pickButton.OnEvent("Click", (*) => ChooseImage())
 MainGui.AddText("x44 y265 w250 h24 cE8EDF5", "Route repetitions (1–20)")
-CycleEdit := MainGui.AddEdit("x44 y291 w100 h30 Number", "6")
+CycleEdit := MainGui.AddEdit("x44 y291 w100 h30 Number", String(RouteCycles))
 MainGui.AddText("x165 y294 w500 h24 c9AA8B8", "The route checks the screen for your selected image.")
 MainGui.AddText("x44 y340 w650 h34 cF2C879", "Note: mouse movement is ignored, so camera-dependent paths may differ.")
 
@@ -67,9 +78,14 @@ MainGui.AddText("x44 y306 w650 h48", "NectarX sends keyboard input and uses scre
 
 tabs.UseTab()
 MainGui.SetFont("s9 c9AA8B8", "Segoe UI")
-MainGui.AddText("x24 y450 w700 h24", "NectarX • Early GUI build • Test in a safe area before leaving unattended.")
+MainGui.AddText("x24 y490 w700 h24", "NectarX • Early GUI build • Test in a safe area before leaving unattended.")
 MainGui.OnEvent("Close", (*) => ExitApp())
-MainGui.Show("w760 h500")
+if (ClaimImage != "" && FileExist(ClaimImage)) {
+    SplitPath(ClaimImage, &savedImageName)
+    ImagePathControl.Text := savedImageName
+    StatusControl.Text := "Ready — saved hive screenshot loaded"
+}
+MainGui.Show("w760 h540")
 
 F1::StartRoute()
 F2::PauseRoute()
@@ -85,6 +101,8 @@ ChooseImage() {
     SplitPath(selected, &fileName)
     ImagePathControl.Text := fileName
     StatusControl.Text := "Ready — hive screenshot selected"
+    IniWrite(ClaimImage, ConfigFile, "Route", "ClaimImage")
+    LogStatus("Hive screenshot selected: " fileName)
 }
 
 StartRoute() {
@@ -100,12 +118,14 @@ StartRoute() {
         return
     }
     RouteCycles := cycles
+    IniWrite(RouteCycles, ConfigFile, "Route", "Cycles")
     if !RouteBusy {
         StopRequested := false
         Running := true
         Paused := false
         RouteBusy := true
         StatusControl.Text := "Running — focus Roblox"
+        LogStatus("Starting route; repetitions: " RouteCycles)
         CycleStatusControl.Text := "Starting route..."
         StartButton.Enabled := false
         PauseButton.Enabled := true
@@ -123,10 +143,12 @@ PauseRoute() {
         Paused := true
         ReleaseMovementKeys()
         StatusControl.Text := "Paused"
+        LogStatus("Route paused; movement keys released.")
         PauseButton.Text := "Resume (F2)"
     } else if Running && Paused {
         Paused := false
         StatusControl.Text := "Running — resumed"
+        LogStatus("Route resumed.")
         PauseButton.Text := "Pause (F2)"
     }
 }
@@ -139,6 +161,7 @@ StopRoute() {
     Paused := false
     ReleaseMovementKeys()
     StatusControl.Text := "Stopped"
+    LogStatus("Route stopped by user.")
     CycleStatusControl.Text := "Route stopped by user"
     StartButton.Enabled := true
     PauseButton.Enabled := false
@@ -166,6 +189,8 @@ RunRoute() {
             WinActivate("ahk_exe RobloxPlayerBeta.exe")
             Sleep 500
         } else {
+            StatusControl.Text := "Roblox not detected"
+            LogStatus("Roblox window not found. Open the game and try again.")
             MsgBox "Roblox was not detected. Open Bee Swarm Simulator, then press Start again.", "NectarX", "Icon!"
             return
         }
@@ -174,6 +199,7 @@ RunRoute() {
             if !WaitUntilRunnable()
                 break
             StatusControl.Text := "Running — keyboard route active"
+            LogStatus("Running route cycle " cycle " of " RouteCycles ".")
             CycleStatusControl.Text := "Cycle " cycle " of " RouteCycles
             cycleStart := A_TickCount
             for event in events {
@@ -191,6 +217,7 @@ RunRoute() {
                 Send "{e}"
                 ReleaseMovementKeys()
                 StatusControl.Text := "Hive image found — E pressed"
+                LogStatus("Hive image matched; E pressed. Exiting.")
                 CycleStatusControl.Text := "Detection successful; closing NectarX..."
                 Sleep 700
                 ExitApp
@@ -198,12 +225,14 @@ RunRoute() {
         }
         if !StopRequested {
             StatusControl.Text := "Finished"
+            LogStatus("Route finished; selected image was not found.")
             CycleStatusControl.Text := "Completed " RouteCycles " cycle(s); hive image not found"
         }
     } catch as err {
         ReleaseMovementKeys()
         MsgBox "NectarX route error:" Chr(10) err.Message, "NectarX", "Iconx"
         StatusControl.Text := "Error — see message"
+        LogStatus("ERROR: " err.Message)
     } finally {
         ReleaseMovementKeys()
         Running := false
@@ -231,6 +260,12 @@ WaitForRecordingTime(cycleStart, targetMs) {
         Sleep 200
     }
     return WaitUntilRunnable()
+}
+
+LogStatus(message) {
+    global LogControl
+    if IsObject(LogControl)
+        LogControl.Value := FormatTime(, "HH:mm:ss") "  " message
 }
 
 WaitUntilRunnable() {
