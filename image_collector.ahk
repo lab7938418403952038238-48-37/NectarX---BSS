@@ -18,6 +18,10 @@ global HasteImageFolder := ""
 global VisionRunning := false
 global LastVisionState := ""
 global LastHasteStacks := -1
+global AIGatherRunning := false
+global AITokenFolder := ""
+global AIHeldKeys := []
+global AILeftHeld := false
 
 main := Gui("+Resize", "NectarX")
 main.BackColor := "55585D"
@@ -74,7 +78,7 @@ saveSettingsBtn.ToolTip := "Save settings", resetSettingsBtn.ToolTip := "Reset s
 
 ; Screen reader tab: template matching is limited to the visible Roblox client window.
 visionPage := main.AddGroupBox("x82 y72 w550 h450", "")
-visionTitle := main.AddText("x105 y91 w490 h30 cF0F0F0", "◎  Roblox screen reader")
+visionTitle := main.AddText("x105 y91 w490 h30 cF0F0F0", "◎  Vision & AI gathering")
 visionTitle.SetFont("s16 Bold", "Segoe UI")
 tokenImageLabel := main.AddText("x105 y133 w470 h22 cEEEEEE", "Token-line template image")
 tokenImageBox := main.AddEdit("x105 y157 w365 h26 ReadOnly")
@@ -82,10 +86,18 @@ tokenImageBtn := main.AddButton("x480 y156 w95 h28", "Choose")
 hasteFolderLabel := main.AddText("x105 y197 w470 h22 cEEEEEE", "Haste stack templates folder")
 hasteFolderBox := main.AddEdit("x105 y221 w365 h26 ReadOnly")
 hasteFolderBtn := main.AddButton("x480 y220 w95 h28", "Choose")
-visionStartBtn := main.AddButton("x105 y270 w220 h42", "Start screen reader")
-visionStopBtn := main.AddButton("x345 y270 w220 h42", "Stop")
-visionStatus := main.AddText("x105 y323 w470 h55 cEEEEEE", "Stopped. Configure images, then start.")
-visionRuleText := main.AddText("x105 y385 w470 h80 cD0D0D0", "Name stack templates haste_1.png through haste_10.png. The highest matching number is reported. Use cropped, clear UI images.")
+visionStartBtn := main.AddButton("x105 y260 w220 h34", "Start screen reader")
+visionStopBtn := main.AddButton("x345 y260 w220 h34", "Stop reader")
+visionStatus := main.AddText("x105 y296 w470 h24 cEEEEEE", "Reader stopped.")
+visionRuleText := main.AddText("x105 y321 w470 h35 cD0D0D0", "Haste templates: haste_1.png to haste_10.png. Haste adjusts movement timing.")
+aiGatherTitle := main.AddText("x105 y359 w470 h22 cFFFFFF", "AI Gathering — token templates")
+aiGatherTitle.SetFont("s11 Bold", "Segoe UI")
+aiTokenFolderLabel := main.AddText("x105 y383 w130 h22 cEEEEEE", "Token images folder")
+aiTokenFolderBox := main.AddEdit("x235 y380 w235 h25 ReadOnly")
+aiTokenFolderBtn := main.AddButton("x480 y379 w95 h27", "Choose")
+aiGatherStartBtn := main.AddButton("x105 y412 w220 h34", "Start AI gathering")
+aiGatherStopBtn := main.AddButton("x345 y412 w220 h34", "Stop AI")
+aiGatherStatus := main.AddText("x105 y448 w470 h22 cEEEEEE", "Stopped. Choose a folder of token templates.")
 
 ; Status tab: current activity, event history, and Discord notification settings.
 statusPage := main.AddGroupBox("x82 y72 w550 h450", "")
@@ -139,13 +151,16 @@ tokenImageBtn.OnEvent("Click", ChooseTokenImage)
 hasteFolderBtn.OnEvent("Click", ChooseHasteFolder)
 visionStartBtn.OnEvent("Click", StartVision)
 visionStopBtn.OnEvent("Click", StopVision)
+aiTokenFolderBtn.OnEvent("Click", ChooseAITokenFolder)
+aiGatherStartBtn.OnEvent("Click", StartAIGather)
+aiGatherStopBtn.OnEvent("Click", StopAIGather)
 saveWebhookBtn.OnEvent("Click", SaveWebhook)
 testWebhookBtn.OnEvent("Click", TestWebhook)
 updateHoneyBtn.OnEvent("Click", UpdateHoneyStats)
 main.OnEvent("Close", (*) => ExitApp())
 LoadSettings()
 LoadWebhook()
-LogActivity("NectarX ready. Gather automation runner is not connected.")
+LogActivity("NectarX ready. AI gathering uses visible image templates and approximate screen-relative movement.")
 ShowPage("gather")
 main.Show("w650 h550")
 
@@ -153,13 +168,13 @@ ShowPage(page) {
     global gatherPage, gatherTitle, fieldLabel, fieldBox, patternLabel, patternBox, durationLabel, durationBox, repeatLabel, repeatBox, startBtn, stopBtn, gatherStatus
     global settingsPage, settingsTitle, speedLabel, speedBox, speedHint, gameLabel, gameBox, detectLabel, detectBox, cameraLabel, cameraBox, scanRateLabel, scanRateBox, scanRateHint, saveSettingsBtn, resetSettingsBtn, settingsStatus
     global imagesPage, imagesTitle, categoryBox, nameBox, captureBtn, chooseBtn, clipBtn, saveBtn, statusText
-    global visionPage, visionTitle, tokenImageLabel, tokenImageBox, tokenImageBtn, hasteFolderLabel, hasteFolderBox, hasteFolderBtn, visionStartBtn, visionStopBtn, visionStatus, visionRuleText
+    global visionPage, visionTitle, tokenImageLabel, tokenImageBox, tokenImageBtn, hasteFolderLabel, hasteFolderBox, hasteFolderBtn, visionStartBtn, visionStopBtn, visionStatus, visionRuleText, aiGatherTitle, aiTokenFolderLabel, aiTokenFolderBox, aiTokenFolderBtn, aiGatherStartBtn, aiGatherStopBtn, aiGatherStatus
     global statusPage, statusTitle, activityLabel, activityText, logLabel, activityBox, honeyLabel, honeyBox, updateHoneyBtn, honeyStatsText, webhookLabel, webhookBox, webhookEnable, saveWebhookBtn, testWebhookBtn, webhookStatus
     for c in [gatherPage,gatherTitle,fieldLabel,fieldBox,patternLabel,patternBox,durationLabel,durationBox,repeatLabel,repeatBox,startBtn,stopBtn,gatherStatus]
         c.Visible := page = "gather"
     for c in [settingsPage,settingsTitle,speedLabel,speedBox,speedHint,gameLabel,gameBox,detectLabel,detectBox,cameraLabel,cameraBox,scanRateLabel,scanRateBox,scanRateHint,saveSettingsBtn,resetSettingsBtn,settingsStatus]
         c.Visible := page = "settings"
-    for c in [visionPage,visionTitle,tokenImageLabel,tokenImageBox,tokenImageBtn,hasteFolderLabel,hasteFolderBox,hasteFolderBtn,visionStartBtn,visionStopBtn,visionStatus,visionRuleText]
+    for c in [visionPage,visionTitle,tokenImageLabel,tokenImageBox,tokenImageBtn,hasteFolderLabel,hasteFolderBox,hasteFolderBtn,visionStartBtn,visionStopBtn,visionStatus,visionRuleText,aiGatherTitle,aiTokenFolderLabel,aiTokenFolderBox,aiTokenFolderBtn,aiGatherStartBtn,aiGatherStopBtn,aiGatherStatus]
         c.Visible := page = "vision"
     for c in [imagesPage,imagesTitle,categoryBox,nameBox,captureBtn,chooseBtn,clipBtn,saveBtn,statusText]
         c.Visible := page = "images"
@@ -204,13 +219,13 @@ StopGather(*) {
     LogActivity("Stop requested. No gather runner was active.")
 }
 SaveSettings(*) {
-    global RootDir, speedBox, gameBox, detectBox, cameraBox, scanRateBox, tokenImageBox, hasteFolderBox, settingsStatus
+    global RootDir, speedBox, gameBox, detectBox, cameraBox, scanRateBox, tokenImageBox, hasteFolderBox, aiTokenFolderBox, settingsStatus
     speed := Trim(speedBox.Value)
     if (speed = "" || !IsNumber(speed) || speed <= 0 || speed > 5) {
         MsgBox("Move speed must be greater than 0 and no more than 5.", "NectarX", "Icon!")
         return
     }
-    data := "move_speed=" speed "`n" . "game=" gameBox.Text "`n" . "game_detection=" detectBox.Text "`n" . "camera=" cameraBox.Text "`n" . "screen_reads_per_sec=" scanRateBox.Text "`n" . "token_line_image=" tokenImageBox.Value "`n" . "haste_image_folder=" hasteFolderBox.Value "`n"
+    data := "move_speed=" speed "`n" . "game=" gameBox.Text "`n" . "game_detection=" detectBox.Text "`n" . "camera=" cameraBox.Text "`n" . "screen_reads_per_sec=" scanRateBox.Text "`n" . "token_line_image=" tokenImageBox.Value "`n" . "haste_image_folder=" hasteFolderBox.Value "`n" . "ai_token_folder=" aiTokenFolderBox.Value "`n"
     path := RootDir "\nectarx_settings.ini"
     try {
         if FileExist(path)
@@ -223,7 +238,7 @@ SaveSettings(*) {
     }
 }
 LoadSettings() {
-    global RootDir, speedBox, gameBox, detectBox, cameraBox, scanRateBox, tokenImageBox, hasteFolderBox
+    global RootDir, speedBox, gameBox, detectBox, cameraBox, scanRateBox, tokenImageBox, hasteFolderBox, aiTokenFolderBox
     path := RootDir "\nectarx_settings.ini"
     if !FileExist(path)
         return
@@ -246,6 +261,8 @@ LoadSettings() {
                 tokenImageBox.Value := SubStr(line, StrLen("token_line_image=") + 1)
             else if (parts[1] = "haste_image_folder")
                 hasteFolderBox.Value := SubStr(line, StrLen("haste_image_folder=") + 1)
+            else if (parts[1] = "ai_token_folder")
+                aiTokenFolderBox.Value := SubStr(line, StrLen("ai_token_folder=") + 1)
         }
     }
 }
@@ -337,6 +354,134 @@ ScanRobloxScreen() {
     } catch as err {
         visionStatus.Text := "Screen read error: " err.Message
     }
+}
+ChooseAITokenFolder(*) {
+    global AITokenFolder, aiTokenFolderBox
+    folder := DirSelect(, 1, "Choose folder containing cropped token images")
+    if (folder = "")
+        return
+    AITokenFolder := folder
+    aiTokenFolderBox.Value := folder
+}
+StartAIGather(*) {
+    global AIGatherRunning, AITokenFolder, aiTokenFolderBox, aiGatherStatus
+    AITokenFolder := Trim(aiTokenFolderBox.Value)
+    if (AITokenFolder = "" || !DirExist(AITokenFolder)) {
+        MsgBox("Choose a folder containing cropped token images first.", "NectarX", "Icon!")
+        return
+    }
+    if !WinExist("ahk_exe RobloxPlayerBeta.exe") && !WinExist("Roblox") {
+        MsgBox("Open Bee Swarm Simulator in Roblox first.", "NectarX", "Icon!")
+        return
+    }
+    AIGatherRunning := true
+    aiGatherStatus.Text := "Running: searching token templates…"
+    LogActivity("AI gathering started.")
+    SetTimer(AIGatherTick, 250)
+    AIGatherTick()
+}
+StopAIGather(*) {
+    global AIGatherRunning, aiGatherStatus, AIHeldKeys, AILeftHeld
+    AIGatherRunning := false
+    SetTimer(AIGatherTick, 0)
+    for key in AIHeldKeys
+        Send("{" key " up}")
+    AIHeldKeys := []
+    if AILeftHeld {
+        Click("Left Up")
+        AILeftHeld := false
+    }
+    aiGatherStatus.Text := "Stopped. Movement keys and click released."
+    LogActivity("AI gathering stopped; inputs released.")
+}
+AIGatherTick() {
+    global AIGatherRunning, AITokenFolder, aiGatherStatus, speedBox, LastHasteStacks, HasteImageFolder, VisionRunning, AIHeldKeys, AILeftHeld
+    if !AIGatherRunning
+        return
+    hwnd := WinExist("ahk_exe RobloxPlayerBeta.exe")
+    if !hwnd
+        hwnd := WinExist("Roblox")
+    if !hwnd {
+        aiGatherStatus.Text := "Roblox window not found."
+        return
+    }
+    try {
+        WinActivate("ahk_id " hwnd)
+        WinGetClientPos(&wx, &wy, &ww, &wh, "ahk_id " hwnd)
+        if (ww < 20 || wh < 20)
+            return
+        haste := Max(0, LastHasteStacks)
+        if !VisionRunning && HasteImageFolder != "" && DirExist(HasteImageFolder) {
+            Loop 10 {
+                n := 11 - A_Index
+                if FindTemplate(HasteImageFolder "\haste_" n ".png", wx, wy, wx + ww - 1, wy + wh - 1) {
+                    haste := n
+                    break
+                }
+            }
+        }
+        targetX := 0, targetY := 0, found := false, foundName := ""
+        Loop Files, AITokenFolder "\*.*", "F" {
+            ext := StrLower(A_LoopFileExt)
+            if !(ext = "png" || ext = "bmp" || ext = "jpg" || ext = "jpeg")
+                continue
+            try {
+                if ImageSearch(&tx, &ty, wx, wy, wx + ww - 1, wy + wh - 1, "*20 " A_LoopFileFullPath) {
+                    targetX := tx, targetY := ty, found := true, foundName := A_LoopFileName
+                    break
+                }
+            }
+        }
+        if !AILeftHeld {
+            Click("Left Down")
+            AILeftHeld := true
+        }
+        if !found {
+            aiGatherStatus.Text := "Searching… tool click held. No saved token visible."
+            AIReleaseMoveKeys()
+            return
+        }
+        centerX := wx + Round(ww / 2), centerY := wy + Round(wh / 2)
+        dx := targetX - centerX, dy := targetY - centerY
+        speed := speedBox.Value + 0
+        hasteMultiplier := 1 + (haste * 0.10)
+        duration := Round((Abs(dx) + Abs(dy)) / Max(1, 2.2 * Max(0.2, speed) * hasteMultiplier))
+        duration := Min(220, Max(35, duration))
+        keys := []
+        if Abs(dx) > 35
+            keys.Push(dx < 0 ? "a" : "d")
+        if Abs(dy) > 35
+            keys.Push(dy < 0 ? "w" : "s")
+        AISetMoveKeys(keys)
+        aiGatherStatus.Text := "Target: " foundName " | Haste " haste " stacks | adjusting movement."
+        Sleep(duration)
+    } catch as err {
+        aiGatherStatus.Text := "AI gather error: " err.Message
+    }
+}
+AISetMoveKeys(keys) {
+    global AIHeldKeys
+    for key in AIHeldKeys {
+        if !HasKeyInArray(keys, key)
+            Send("{" key " up}")
+    }
+    for key in keys {
+        if !HasKeyInArray(AIHeldKeys, key)
+            Send("{" key " down}")
+    }
+    AIHeldKeys := keys
+}
+AIReleaseMoveKeys() {
+    global AIHeldKeys
+    for key in AIHeldKeys
+        Send("{" key " up}")
+    AIHeldKeys := []
+}
+HasKeyInArray(arr, value) {
+    for item in arr
+        if (item = value)
+            return true
+    return false
 }
 FindTemplate(imagePath, x1, y1, x2, y2) {
     if !FileExist(imagePath)
