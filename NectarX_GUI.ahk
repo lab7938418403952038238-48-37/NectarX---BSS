@@ -94,7 +94,7 @@ F3::StopRoute()
 F4::ExitApp()
 
 ChooseImage() {
-    global ClaimImage, ImagePathControl, StatusControl
+    global ClaimImage, ImagePathControl, StatusControl, ConfigFile
     selected := FileSelect(1, A_ScriptDir, "Choose your hive-claim screenshot", "Images (*.png; *.bmp; *.jpg; *.jpeg)")
     if (selected = "")
         return
@@ -107,7 +107,7 @@ ChooseImage() {
 }
 
 StartRoute() {
-    global Running, Paused, RouteBusy, StopRequested, ClaimImage, CycleEdit, RouteCycles
+    global Running, Paused, RouteBusy, StopRequested, ClaimImage, CycleEdit, RouteCycles, ConfigFile
     global StatusControl, CycleStatusControl, StartButton, PauseButton, StopButton
     if (ClaimImage = "") {
         MsgBox "Please open Route & Detection and choose your hive screenshot first.", "NectarX setup", "Icon!"
