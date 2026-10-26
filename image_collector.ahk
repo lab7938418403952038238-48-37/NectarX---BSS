@@ -505,7 +505,10 @@ RunRouteScript(fileName, *) {
         return
     }
     try {
-        Run('"' A_AhkPath '" "' path '"', folder)
+        workingDir := InStr(path, RootDir "\") = 1 ? RootDir : folder
+        if (workingDir = "")
+            workingDir := RootDir
+        Run('"' A_AhkPath '" "' path '"', workingDir)
         routesStatus.Text := "Launched: " fileName
         LogActivity("Route script launched: " fileName)
     } catch as err {
