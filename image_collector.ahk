@@ -156,8 +156,10 @@ webhookEnable := main.AddCheckbox("x105 y394 w280 h24", "Send activity updates t
 saveWebhookBtn := main.AddButton("x105 y424 w135 h32", "Save")
 testWebhookBtn := main.AddButton("x255 y424 w135 h32", "Test")
 webhookStatus := main.AddText("x400 y430 w175 h24 cEEEEEE", "")
-macroControlsLabel := main.AddText("x105 y465 w470 h20 cFFFFFF", "Macro controls: F1 Start  |  F2 Pause/Resume  |  F3 Stop")
-macroStateText := main.AddText("x105 y486 w470 h22 cD0D0D0", "Macro idle.")
+statusStartBtn := main.AddButton("x105 y462 w115 h30", "Start (F1)")
+statusPauseBtn := main.AddButton("x225 y462 w140 h30", "Pause (F2)")
+statusStopBtn := main.AddButton("x370 y462 w115 h30", "Stop (F3)")
+macroStateText := main.AddText("x105 y496 w470 h20 cD0D0D0", "Macro idle.")
 webhookBox.ToolTip := "Paste a Discord webhook URL. Keep it private."
 ; Images tab retains the screenshot/template collector.
 imagesPage := main.AddGroupBox("x82 y72 w550 h450", "")
@@ -190,6 +192,9 @@ toggleBtn.OnEvent("Click", ToggleSidebar)
 startBtn.OnEvent("Click", StartGather)
 stopBtn.OnEvent("Click", StopGather)
 pauseGatherBtn.OnEvent("Click", PauseGather)
+statusStartBtn.OnEvent("Click", StartGather)
+statusPauseBtn.OnEvent("Click", PauseGather)
+statusStopBtn.OnEvent("Click", StopGather)
 saveSettingsBtn.OnEvent("Click", SaveSettings)
 resetSettingsBtn.OnEvent("Click", ResetSettings)
 tokenImageBtn.OnEvent("Click", ChooseTokenImage)
@@ -218,7 +223,7 @@ ShowPage(page) {
     global settingsPage, settingsTitle, speedLabel, speedBox, speedHint, gameLabel, gameBox, detectLabel, detectBox, cameraLabel, cameraBox, scanRateLabel, scanRateBox, scanRateHint, saveSettingsBtn, resetSettingsBtn, settingsStatus
     global imagesPage, imagesTitle, categoryBox, nameBox, captureBtn, chooseBtn, clipBtn, saveBtn, statusText
     global visionPage, visionTitle, tokenImageLabel, tokenImageBox, tokenImageBtn, hasteFolderLabel, hasteFolderBox, hasteFolderBtn, visionStartBtn, visionStopBtn, visionStatus, visionRuleText, aiGatherTitle, aiTokenFolderLabel, aiTokenFolderBox, aiTokenFolderBtn, aiGatherStartBtn, aiGatherStopBtn, aiGatherStatus
-    global statusPage, statusTitle, activityLabel, activityText, logLabel, activityBox, honeyLabel, honeyBox, updateHoneyBtn, honeyStatsText, webhookLabel, webhookBox, webhookEnable, saveWebhookBtn, testWebhookBtn, webhookStatus, macroControlsLabel, macroStateText
+    global statusPage, statusTitle, activityLabel, activityText, logLabel, activityBox, honeyLabel, honeyBox, updateHoneyBtn, honeyStatsText, webhookLabel, webhookBox, webhookEnable, saveWebhookBtn, testWebhookBtn, webhookStatus, statusStartBtn, statusPauseBtn, statusStopBtn, macroStateText
     global routesPage, routesTitle, routesFolderLabel, routesFolderBox, routesFolderBtn, routesInfo, routesStatus, routeButtons, spawnHive1Btn
     for c in [gatherPage,gatherTitle,fieldLabel,fieldBox,patternLabel,patternBox,timerLabel,timerBox,hiveSlotLabel,hiveSlotBox,bssSpeedLabel,bssSpeedBox,bssSpeedHint,startBtn,stopBtn,pauseGatherBtn,gatherStatus]
         c.Visible := page = "gather"
@@ -232,7 +237,7 @@ ShowPage(page) {
         c.Visible := page = "routes"
     for c in [imagesPage,imagesTitle,categoryBox,nameBox,captureBtn,chooseBtn,clipBtn,saveBtn,statusText]
         c.Visible := page = "images"
-    for c in [statusPage,statusTitle,activityLabel,activityText,logLabel,activityBox,honeyLabel,honeyBox,updateHoneyBtn,honeyStatsText,webhookLabel,webhookBox,webhookEnable,saveWebhookBtn,testWebhookBtn,webhookStatus,macroControlsLabel,macroStateText]
+    for c in [statusPage,statusTitle,activityLabel,activityText,logLabel,activityBox,honeyLabel,honeyBox,updateHoneyBtn,honeyStatsText,webhookLabel,webhookBox,webhookEnable,saveWebhookBtn,testWebhookBtn,webhookStatus,statusStartBtn,statusPauseBtn,statusStopBtn,macroStateText]
         c.Visible := page = "status"
     if (page = "status")
         RefreshActivity()
