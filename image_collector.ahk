@@ -274,13 +274,13 @@ ShowPage(page) {
         RefreshActivity()
 }
 ToggleSidebar(*) {
-    global main, sidebar, toggleBtn, gatherTab, settingsTab, imagesTab, statusTab, visionTab
+    global main, sidebar, toggleBtn, gatherTab, settingsTab, imagesTab, statusTab, visionTab, diagnosticTab
     static expanded := false
     expanded := !expanded
     if expanded {
         sidebar.Move(0,66,150,470), toggleBtn.Move(105,74,34,30)
         gatherTab.Move(12,119,126,44), settingsTab.Move(12,173,126,44), imagesTab.Move(12,227,126,44), statusTab.Move(12,281,126,44), visionTab.Move(12,335,126,44)
-        gatherTab.Move(12,443,126,44)
+        diagnosticTab.Move(12,443,126,44)
         gatherTab.Text := "◈  Gather", settingsTab.Text := "⚙  Settings", imagesTab.Text := "▧  Images", statusTab.Text := "◷  Status", visionTab.Text := "◎  Vision", diagnosticTab.Text := "▣  Diagnose"
         toggleBtn.Text := "‹", main.Show("w740")
     } else {
