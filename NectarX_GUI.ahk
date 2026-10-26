@@ -10,7 +10,7 @@ CoordMode "Pixel", "Screen"
 ; Route timings are from the existing TinyTask recording.
 ; Mouse movement/clicks are intentionally ignored.
 
-global Running := false, Paused := false, StopRequested := false, RouteBusy := false
+Running := false, Paused := false, StopRequested := false, RouteBusy := false
 global ClaimImage := "", RouteCycles := 6
  global ConfigFile := A_ScriptDir "\\NectarX.ini", LogControl := ""
 try {
@@ -22,8 +22,8 @@ try {
     ClaimImage := ""
     RouteCycles := 6
 }
-global CycleEdit := "", StatusControl := "", CycleStatusControl := "", ImagePathControl := ""
-global StartButton := "", PauseButton := "", StopButton := "", MainGui := ""
+CycleEdit := "", StatusControl := "", CycleStatusControl := "", ImagePathControl := ""
+StartButton := "", PauseButton := "", StopButton := "", MainGui := ""
 
 MainGui := Gui("+MinSize760x520", "NectarX | Bee Swarm Simulator Macro")
 MainGui.BackColor := "10151D"
