@@ -9,6 +9,7 @@ SetKeyDelay(20, 20)
 ; F8 is emergency stop; NectarX GUI F2 pauses and F3 stops through nectarx_route.ini.
 global RouteStopped := false
 global RouteHeldKey := ""
+global RoutePausedMs := 0
 global ConfigPath := A_ScriptDir "\nectarx_route.ini"
 global BaseSpeed := IniRead(ConfigPath, "Movement", "BaseSpeed", "32.2") + 0
 global ReferenceSpeed := IniRead(ConfigPath, "Movement", "ReferenceSpeed", "32.2") + 0
@@ -69,7 +70,8 @@ WalkFor(key, baseDurationMs) {
     RouteHeldKey := key
     Send("{" key " down}")
     started := A_TickCount
-    while (!RouteStopped && A_TickCount - started < durationMs) {
+    pausedAtStart := RoutePausedMs
+    while (!RouteStopped && A_TickCount - started - (RoutePausedMs - pausedAtStart) < durationMs) {
         if !CheckControl() {
             Send("{" key " up}")
             RouteHeldKey := ""
@@ -90,6 +92,9 @@ CheckControl() {
         ToolTip()
         return false
     }
+    pauseStarted := 0
+    if (IniRead(ConfigPath, "Control", "Paused", "0") = "1")
+        pauseStarted := A_TickCount
     while (IniRead(ConfigPath, "Control", "Paused", "0") = "1" && !RouteStopped) {
         ReleaseMovement()
         ToolTip("NectarX paused — F2 to resume, F3 to stop")
@@ -100,6 +105,8 @@ CheckControl() {
         }
         Sleep(100)
     }
+    if (pauseStarted)
+        RoutePausedMs += A_TickCount - pauseStarted
     ToolTip()
     return !RouteStopped
 }
