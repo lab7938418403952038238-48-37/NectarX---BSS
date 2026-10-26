@@ -13,6 +13,11 @@ global WebhookUrl := ""
 global HoneySession := 0
 global SessionStartTick := A_TickCount
 global HoneyHistory := []
+global TokenLineImage := ""
+global HasteImageFolder := ""
+global VisionRunning := false
+global LastVisionState := ""
+global LastHasteStacks := -1
 
 main := Gui("+Resize", "NectarX")
 main.BackColor := "55585D"
@@ -26,7 +31,8 @@ gatherTab := main.AddButton("x9 y119 w46 h44", "◈")
 settingsTab := main.AddButton("x9 y173 w46 h44", "⚙")
 imagesTab := main.AddButton("x9 y227 w46 h44", "▧")
 statusTab := main.AddButton("x9 y281 w46 h44", "◷")
-gatherTab.ToolTip := "Gather", settingsTab.ToolTip := "Settings", imagesTab.ToolTip := "Images", statusTab.ToolTip := "Status"
+visionTab := main.AddButton("x9 y335 w46 h44", "◎")
+gatherTab.ToolTip := "Gather", settingsTab.ToolTip := "Settings", imagesTab.ToolTip := "Images", statusTab.ToolTip := "Status", visionTab.ToolTip := "Screen reader"
 
 ; Gather tab
 gatherPage := main.AddGroupBox("x82 y72 w550 h450", "")
@@ -58,10 +64,28 @@ detectLabel := main.AddText("x105 y225 w155 h24 cEEEEEE", "Game detection")
 detectBox := main.AddDropDownList("x270 y220 w320 Choose1", ["Auto-detect Roblox", "Manual window selection"])
 cameraLabel := main.AddText("x105 y269 w155 h24 cEEEEEE", "Camera style")
 cameraBox := main.AddDropDownList("x270 y264 w320 Choose1", ["Default", "More zoomed out", "More zoomed in"])
-saveSettingsBtn := main.AddButton("x105 y330 w220 h42", "✓")
-resetSettingsBtn := main.AddButton("x345 y330 w220 h42", "↺")
-settingsStatus := main.AddText("x105 y390 w470 h40 cEEEEEE", "")
+scanRateLabel := main.AddText("x105 y310 w155 h24 cEEEEEE", "Screen reads / sec")
+scanRateBox := main.AddDropDownList("x270 y305 w120 Choose2", ["1", "2", "3", "4", "5", "10"])
+scanRateHint := main.AddText("x400 y309 w190 h24 cD0D0D0", "Higher = more CPU use")
+saveSettingsBtn := main.AddButton("x105 y355 w220 h42", "✓")
+resetSettingsBtn := main.AddButton("x345 y355 w220 h42", "↺")
+settingsStatus := main.AddText("x105 y410 w470 h40 cEEEEEE", "")
 saveSettingsBtn.ToolTip := "Save settings", resetSettingsBtn.ToolTip := "Reset settings"
+
+; Screen reader tab: template matching is limited to the visible Roblox client window.
+visionPage := main.AddGroupBox("x82 y72 w550 h450", "")
+visionTitle := main.AddText("x105 y91 w490 h30 cF0F0F0", "◎  Roblox screen reader")
+visionTitle.SetFont("s16 Bold", "Segoe UI")
+tokenImageLabel := main.AddText("x105 y133 w470 h22 cEEEEEE", "Token-line template image")
+tokenImageBox := main.AddEdit("x105 y157 w365 h26 ReadOnly")
+tokenImageBtn := main.AddButton("x480 y156 w95 h28", "Choose")
+hasteFolderLabel := main.AddText("x105 y197 w470 h22 cEEEEEE", "Haste stack templates folder")
+hasteFolderBox := main.AddEdit("x105 y221 w365 h26 ReadOnly")
+hasteFolderBtn := main.AddButton("x480 y220 w95 h28", "Choose")
+visionStartBtn := main.AddButton("x105 y270 w220 h42", "Start screen reader")
+visionStopBtn := main.AddButton("x345 y270 w220 h42", "Stop")
+visionStatus := main.AddText("x105 y323 w470 h55 cEEEEEE", "Stopped. Configure images, then start.")
+visionRuleText := main.AddText("x105 y385 w470 h80 cD0D0D0", "Name stack templates haste_1.png through haste_10.png. The highest matching number is reported. Use cropped, clear UI images.")
 
 ; Status tab: current activity, event history, and Discord notification settings.
 statusPage := main.AddGroupBox("x82 y72 w550 h450", "")
@@ -105,11 +129,16 @@ gatherTab.OnEvent("Click", (*) => ShowPage("gather"))
 settingsTab.OnEvent("Click", (*) => ShowPage("settings"))
 imagesTab.OnEvent("Click", (*) => ShowPage("images"))
 statusTab.OnEvent("Click", (*) => ShowPage("status"))
+visionTab.OnEvent("Click", (*) => ShowPage("vision"))
 toggleBtn.OnEvent("Click", ToggleSidebar)
 startBtn.OnEvent("Click", StartGather)
 stopBtn.OnEvent("Click", StopGather)
 saveSettingsBtn.OnEvent("Click", SaveSettings)
 resetSettingsBtn.OnEvent("Click", ResetSettings)
+tokenImageBtn.OnEvent("Click", ChooseTokenImage)
+hasteFolderBtn.OnEvent("Click", ChooseHasteFolder)
+visionStartBtn.OnEvent("Click", StartVision)
+visionStopBtn.OnEvent("Click", StopVision)
 saveWebhookBtn.OnEvent("Click", SaveWebhook)
 testWebhookBtn.OnEvent("Click", TestWebhook)
 updateHoneyBtn.OnEvent("Click", UpdateHoneyStats)
@@ -122,13 +151,16 @@ main.Show("w650 h550")
 
 ShowPage(page) {
     global gatherPage, gatherTitle, fieldLabel, fieldBox, patternLabel, patternBox, durationLabel, durationBox, repeatLabel, repeatBox, startBtn, stopBtn, gatherStatus
-    global settingsPage, settingsTitle, speedLabel, speedBox, speedHint, gameLabel, gameBox, detectLabel, detectBox, cameraLabel, cameraBox, saveSettingsBtn, resetSettingsBtn, settingsStatus
+    global settingsPage, settingsTitle, speedLabel, speedBox, speedHint, gameLabel, gameBox, detectLabel, detectBox, cameraLabel, cameraBox, scanRateLabel, scanRateBox, scanRateHint, saveSettingsBtn, resetSettingsBtn, settingsStatus
     global imagesPage, imagesTitle, categoryBox, nameBox, captureBtn, chooseBtn, clipBtn, saveBtn, statusText
+    global visionPage, visionTitle, tokenImageLabel, tokenImageBox, tokenImageBtn, hasteFolderLabel, hasteFolderBox, hasteFolderBtn, visionStartBtn, visionStopBtn, visionStatus, visionRuleText
     global statusPage, statusTitle, activityLabel, activityText, logLabel, activityBox, honeyLabel, honeyBox, updateHoneyBtn, honeyStatsText, webhookLabel, webhookBox, webhookEnable, saveWebhookBtn, testWebhookBtn, webhookStatus
     for c in [gatherPage,gatherTitle,fieldLabel,fieldBox,patternLabel,patternBox,durationLabel,durationBox,repeatLabel,repeatBox,startBtn,stopBtn,gatherStatus]
         c.Visible := page = "gather"
-    for c in [settingsPage,settingsTitle,speedLabel,speedBox,speedHint,gameLabel,gameBox,detectLabel,detectBox,cameraLabel,cameraBox,saveSettingsBtn,resetSettingsBtn,settingsStatus]
+    for c in [settingsPage,settingsTitle,speedLabel,speedBox,speedHint,gameLabel,gameBox,detectLabel,detectBox,cameraLabel,cameraBox,scanRateLabel,scanRateBox,scanRateHint,saveSettingsBtn,resetSettingsBtn,settingsStatus]
         c.Visible := page = "settings"
+    for c in [visionPage,visionTitle,tokenImageLabel,tokenImageBox,tokenImageBtn,hasteFolderLabel,hasteFolderBox,hasteFolderBtn,visionStartBtn,visionStopBtn,visionStatus,visionRuleText]
+        c.Visible := page = "vision"
     for c in [imagesPage,imagesTitle,categoryBox,nameBox,captureBtn,chooseBtn,clipBtn,saveBtn,statusText]
         c.Visible := page = "images"
     for c in [statusPage,statusTitle,activityLabel,activityText,logLabel,activityBox,honeyLabel,honeyBox,updateHoneyBtn,honeyStatsText,webhookLabel,webhookBox,webhookEnable,saveWebhookBtn,testWebhookBtn,webhookStatus]
@@ -137,18 +169,18 @@ ShowPage(page) {
         RefreshActivity()
 }
 ToggleSidebar(*) {
-    global main, sidebar, toggleBtn, gatherTab, settingsTab, imagesTab, statusTab
+    global main, sidebar, toggleBtn, gatherTab, settingsTab, imagesTab, statusTab, visionTab
     static expanded := false
     expanded := !expanded
     if expanded {
         sidebar.Move(0,66,150,470), toggleBtn.Move(105,74,34,30)
-        gatherTab.Move(12,119,126,44), settingsTab.Move(12,173,126,44), imagesTab.Move(12,227,126,44), statusTab.Move(12,281,126,44)
-        gatherTab.Text := "◈  Gather", settingsTab.Text := "⚙  Settings", imagesTab.Text := "▧  Images", statusTab.Text := "◷  Status"
+        gatherTab.Move(12,119,126,44), settingsTab.Move(12,173,126,44), imagesTab.Move(12,227,126,44), statusTab.Move(12,281,126,44), visionTab.Move(12,335,126,44)
+        gatherTab.Text := "◈  Gather", settingsTab.Text := "⚙  Settings", imagesTab.Text := "▧  Images", statusTab.Text := "◷  Status", visionTab.Text := "◎  Vision"
         toggleBtn.Text := "‹", main.Show("w740")
     } else {
         sidebar.Move(0,66,64,470), toggleBtn.Move(15,74,34,30)
-        gatherTab.Move(9,119,46,44), settingsTab.Move(9,173,46,44), imagesTab.Move(9,227,46,44), statusTab.Move(9,281,46,44)
-        gatherTab.Text := "◈", settingsTab.Text := "⚙", imagesTab.Text := "▧", statusTab.Text := "◷"
+        gatherTab.Move(9,119,46,44), settingsTab.Move(9,173,46,44), imagesTab.Move(9,227,46,44), statusTab.Move(9,281,46,44), visionTab.Move(9,335,46,44)
+        gatherTab.Text := "◈", settingsTab.Text := "⚙", imagesTab.Text := "▧", statusTab.Text := "◷", visionTab.Text := "◎"
         toggleBtn.Text := "›", main.Show("w650")
     }
 }
@@ -178,7 +210,7 @@ SaveSettings(*) {
         MsgBox("Move speed must be greater than 0 and no more than 5.", "NectarX", "Icon!")
         return
     }
-    data := "move_speed=" speed "`n" . "game=" gameBox.Text "`n" . "game_detection=" detectBox.Text "`n" . "camera=" cameraBox.Text "`n"
+    data := "move_speed=" speed "`n" . "game=" gameBox.Text "`n" . "game_detection=" detectBox.Text "`n" . "camera=" cameraBox.Text "`n" . "screen_reads_per_sec=" scanRateBox.Text "`n" . "token_line_image=" tokenImageBox.Value "`n" . "haste_image_folder=" hasteFolderBox.Value "`n"
     path := RootDir "\nectarx_settings.ini"
     try {
         if FileExist(path)
@@ -191,7 +223,7 @@ SaveSettings(*) {
     }
 }
 LoadSettings() {
-    global RootDir, speedBox, gameBox, detectBox, cameraBox
+    global RootDir, speedBox, gameBox, detectBox, cameraBox, scanRateBox, tokenImageBox, hasteFolderBox
     path := RootDir "\nectarx_settings.ini"
     if !FileExist(path)
         return
@@ -208,13 +240,110 @@ LoadSettings() {
                 detectBox.Text := parts[2]
             else if (parts[1] = "camera")
                 cameraBox.Text := parts[2]
+            else if (parts[1] = "screen_reads_per_sec")
+                scanRateBox.Text := parts[2]
+            else if (parts[1] = "token_line_image")
+                tokenImageBox.Value := SubStr(line, StrLen("token_line_image=") + 1)
+            else if (parts[1] = "haste_image_folder")
+                hasteFolderBox.Value := SubStr(line, StrLen("haste_image_folder=") + 1)
         }
     }
 }
 ResetSettings(*) {
-    global speedBox, gameBox, detectBox, cameraBox, settingsStatus
-    speedBox.Value := "1.0", gameBox.Choose(1), detectBox.Choose(1), cameraBox.Choose(1)
+    global speedBox, gameBox, detectBox, cameraBox, scanRateBox, settingsStatus
+    speedBox.Value := "1.0", gameBox.Choose(1), detectBox.Choose(1), cameraBox.Choose(1), scanRateBox.Choose(2)
     settingsStatus.Text := ""
+}
+
+
+ChooseTokenImage(*) {
+    global TokenLineImage, tokenImageBox
+    file := FileSelect(1, , "Choose cropped token-line template", "Images (*.png; *.bmp; *.jpg; *.jpeg)")
+    if (file = "")
+        return
+    TokenLineImage := file
+    tokenImageBox.Value := file
+}
+ChooseHasteFolder(*) {
+    global HasteImageFolder, hasteFolderBox
+    folder := DirSelect(, 1, "Choose folder containing haste_1.png through haste_10.png")
+    if (folder = "")
+        return
+    HasteImageFolder := folder
+    hasteFolderBox.Value := folder
+}
+StartVision(*) {
+    global VisionRunning, scanRateBox, TokenLineImage, HasteImageFolder, tokenImageBox, hasteFolderBox, visionStatus
+    TokenLineImage := Trim(tokenImageBox.Value)
+    HasteImageFolder := Trim(hasteFolderBox.Value)
+    if (TokenLineImage = "" || !FileExist(TokenLineImage)) {
+        MsgBox("Choose a valid token-line template image first.", "NectarX", "Icon!")
+        return
+    }
+    if (HasteImageFolder = "" || !DirExist(HasteImageFolder)) {
+        MsgBox("Choose the folder containing haste_1.png through haste_10.png.", "NectarX", "Icon!")
+        return
+    }
+    if !WinExist("ahk_exe RobloxPlayerBeta.exe") && !WinExist("Roblox") {
+        MsgBox("Roblox was not detected. Open Bee Swarm Simulator and try again.", "NectarX", "Icon!")
+        return
+    }
+    VisionRunning := true
+    visionStatus.Text := "Reading Roblox screen…"
+    rate := scanRateBox.Text + 0
+    SetTimer(ScanRobloxScreen, Max(100, Round(1000 / rate)))
+    LogActivity("Roblox screen reader started at " rate " reads/sec.")
+    ScanRobloxScreen()
+}
+StopVision(*) {
+    global VisionRunning, visionStatus
+    VisionRunning := false
+    SetTimer(ScanRobloxScreen, 0)
+    visionStatus.Text := "Stopped."
+    LogActivity("Roblox screen reader stopped.")
+}
+ScanRobloxScreen() {
+    global VisionRunning, TokenLineImage, HasteImageFolder, visionStatus, LastVisionState, LastHasteStacks
+    if !VisionRunning
+        return
+    hwnd := WinExist("ahk_exe RobloxPlayerBeta.exe")
+    if !hwnd
+        hwnd := WinExist("Roblox")
+    if !hwnd {
+        visionStatus.Text := "Roblox window not found. Reader paused."
+        return
+    }
+    try {
+        WinGetClientPos(&wx, &wy, &ww, &wh, "ahk_id " hwnd)
+        if (ww < 20 || wh < 20)
+            return
+        tokenFound := FindTemplate(TokenLineImage, wx, wy, wx + ww - 1, wy + wh - 1)
+        hasteStacks := 0
+        Loop 10 {
+            n := 11 - A_Index
+            template := HasteImageFolder "\haste_" n ".png"
+            if FileExist(template) && FindTemplate(template, wx, wy, wx + ww - 1, wy + wh - 1) {
+                hasteStacks := n
+                break
+            }
+        }
+        state := "Token line: " (tokenFound ? "FOUND" : "not found") " | Haste stacks: " hasteStacks
+        visionStatus.Text := state
+        if (state != LastVisionState) {
+            LogActivity("Screen reader: " state ".")
+            LastVisionState := state
+        }
+        LastHasteStacks := hasteStacks
+    } catch as err {
+        visionStatus.Text := "Screen read error: " err.Message
+    }
+}
+FindTemplate(imagePath, x1, y1, x2, y2) {
+    if !FileExist(imagePath)
+        return false
+    try return ImageSearch(&foundX, &foundY, x1, y1, x2, y2, "*20 " imagePath)
+    catch
+        return false
 }
 
 LogActivity(message) {
