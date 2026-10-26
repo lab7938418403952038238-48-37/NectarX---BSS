@@ -97,7 +97,7 @@ aiTokenFolderBox := main.AddEdit("x235 y380 w235 h25 ReadOnly")
 aiTokenFolderBtn := main.AddButton("x480 y379 w95 h27", "Choose")
 aiGatherStartBtn := main.AddButton("x105 y412 w220 h34", "Start AI gathering")
 aiGatherStopBtn := main.AddButton("x345 y412 w220 h34", "Stop AI")
-aiGatherStatus := main.AddText("x105 y448 w470 h22 cEEEEEE", "Stopped. Choose a folder of token templates.")
+aiGatherStatus := main.AddText("x105 y448 w470 h22 cEEEEEE", "Stopped. Choose token templates. Press F8 to stop safely.")
 
 ; Status tab: current activity, event history, and Discord notification settings.
 statusPage := main.AddGroupBox("x82 y72 w550 h450", "")
@@ -157,7 +157,8 @@ aiGatherStopBtn.OnEvent("Click", StopAIGather)
 saveWebhookBtn.OnEvent("Click", SaveWebhook)
 testWebhookBtn.OnEvent("Click", TestWebhook)
 updateHoneyBtn.OnEvent("Click", UpdateHoneyStats)
-main.OnEvent("Close", (*) => ExitApp())
+main.OnEvent("Close", ShutdownNectarX)
+Hotkey("F8", StopAIGather)
 LoadSettings()
 LoadWebhook()
 LogActivity("NectarX ready. AI gathering uses visible image templates and approximate screen-relative movement.")
@@ -380,6 +381,11 @@ StartAIGather(*) {
     SetTimer(AIGatherTick, 250)
     AIGatherTick()
 }
+ShutdownNectarX(*) {
+    StopAIGather()
+    StopVision()
+    ExitApp()
+}
 StopAIGather(*) {
     global AIGatherRunning, aiGatherStatus, AIHeldKeys, AILeftHeld
     AIGatherRunning := false
@@ -391,7 +397,7 @@ StopAIGather(*) {
         Click("Left Up")
         AILeftHeld := false
     }
-    aiGatherStatus.Text := "Stopped. Movement keys and click released."
+    aiGatherStatus.Text := "Stopped. Inputs released. (F8 also stops AI gathering.)"
     LogActivity("AI gathering stopped; inputs released.")
 }
 AIGatherTick() {
