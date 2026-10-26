@@ -22,6 +22,11 @@ global AIGatherRunning := false
 global AITokenFolder := ""
 global AIHeldKeys := []
 global AILeftHeld := false
+global AITokenFirstSeen := Map()
+global AICurrentTokenKey := ""
+global AIOverlay := 0
+global AIOverlayBox := 0
+global AIOverlayTimer := 0
 global RouteScriptsFolder := ""
 
 main := Gui("+Resize", "NectarX")
@@ -99,7 +104,7 @@ aiTokenFolderBox := main.AddEdit("x235 y380 w235 h25 ReadOnly")
 aiTokenFolderBtn := main.AddButton("x480 y379 w95 h27", "Choose")
 aiGatherStartBtn := main.AddButton("x105 y412 w220 h34", "Start AI gathering")
 aiGatherStopBtn := main.AddButton("x345 y412 w220 h34", "Stop AI")
-aiGatherStatus := main.AddText("x105 y448 w470 h22 cEEEEEE", "Stopped. Choose token templates. Press F8 to stop safely.")
+aiGatherStatus := main.AddText("x105 y448 w470 h22 cEEEEEE", "Bottom-half scan. Field landmarks required; prefix priority filenames 01_, 02_, etc.")
 
 ; Hive & Routes tab: launches user-supplied route scripts from a selected folder.
  routesPage := main.AddGroupBox("x82 y72 w550 h450", "")
@@ -438,6 +443,13 @@ StartAIGather(*) {
         MsgBox("Open Bee Swarm Simulator in Roblox first.", "NectarX", "Icon!")
         return
     }
+    fieldFolder := RootDir "\\NectarX images\\fields_landmarks"
+    if !DirExist(fieldFolder) || !FolderHasImages(fieldFolder) {
+        MsgBox("AI gathering requires field-landmark images to detect when you are actually in a field.`n`nAdd clear cropped landmark images to:`n" fieldFolder, "NectarX", "Icon!")
+        return
+    }
+    AITokenFirstSeen := Map()
+    AICurrentTokenKey := ""
     AIGatherRunning := true
     aiGatherStatus.Text := "Running: searching token templates…"
     LogActivity("AI gathering started.")
@@ -450,7 +462,7 @@ ShutdownNectarX(*) {
     ExitApp()
 }
 StopAIGather(*) {
-    global AIGatherRunning, aiGatherStatus, AIHeldKeys, AILeftHeld
+    global AIGatherRunning, aiGatherStatus, AIHeldKeys, AILeftHeld, AIOverlay, AICurrentTokenKey
     AIGatherRunning := false
     SetTimer(AIGatherTick, 0)
     for key in AIHeldKeys
@@ -460,11 +472,14 @@ StopAIGather(*) {
         Click("Left Up")
         AILeftHeld := false
     }
+    if IsObject(AIOverlay)
+        try AIOverlay.Hide()
+    AICurrentTokenKey := ""
     aiGatherStatus.Text := "Stopped. Inputs released. (F8 also stops AI gathering.)"
     LogActivity("AI gathering stopped; inputs released.")
 }
 AIGatherTick() {
-    global AIGatherRunning, AITokenFolder, aiGatherStatus, speedBox, LastHasteStacks, HasteImageFolder, VisionRunning, AIHeldKeys, AILeftHeld
+    global AIGatherRunning, AITokenFolder, aiGatherStatus, speedBox, LastHasteStacks, HasteImageFolder, VisionRunning, AIHeldKeys, AILeftHeld, RootDir, AITokenFirstSeen, AICurrentTokenKey, AIOverlay, AIOverlayBox, AIOverlayTimer
     if !AIGatherRunning
         return
     hwnd := WinExist("ahk_exe RobloxPlayerBeta.exe")
@@ -472,13 +487,27 @@ AIGatherTick() {
         hwnd := WinExist("Roblox")
     if !hwnd {
         aiGatherStatus.Text := "Roblox window not found."
+        if IsObject(AIOverlay)
+            AIOverlay.Hide()
+        AIReleaseMoveKeys()
         return
     }
     try {
-        WinActivate("ahk_id " hwnd)
         WinGetClientPos(&wx, &wy, &ww, &wh, "ahk_id " hwnd)
         if (ww < 20 || wh < 20)
             return
+
+        ; Require a saved field landmark to avoid gathering at hive/menu screens.
+        fieldFolder := RootDir "\NectarX images\fields_landmarks"
+        if !IsInField(fieldFolder, wx, wy, ww, wh) {
+            aiGatherStatus.Text := "Paused: no field landmark detected. Move into a field."
+            AIReleaseMoveKeys()
+            if IsObject(AIOverlay)
+                AIOverlay.Hide()
+            AICurrentTokenKey := ""
+            return
+        }
+
         haste := Max(0, LastHasteStacks)
         if !VisionRunning && HasteImageFolder != "" && DirExist(HasteImageFolder) {
             Loop 10 {
@@ -489,27 +518,49 @@ AIGatherTick() {
                 }
             }
         }
-        targetX := 0, targetY := 0, found := false, foundName := ""
+
+        ; Search only the lower 50% of the client. Numeric prefixes set priority:
+        ; 01_star.png outranks 02_gold.png; unprefixed files have priority 1000.
+        scanTop := wy + Floor(wh * 0.5)
+        targetX := 0, targetY := 0, found := false, foundName := "", bestPriority := 999999
         Loop Files, AITokenFolder "\*.*", "F" {
             ext := StrLower(A_LoopFileExt)
             if !(ext = "png" || ext = "bmp" || ext = "jpg" || ext = "jpeg")
                 continue
+            priority := 1000
+            if RegExMatch(A_LoopFileName, "^(\d+)[_-]", &priorityMatch)
+                priority := Integer(priorityMatch[1])
+            if (priority > bestPriority)
+                continue
             try {
-                if ImageSearch(&tx, &ty, wx, wy, wx + ww - 1, wy + wh - 1, "*20 " A_LoopFileFullPath) {
-                    targetX := tx, targetY := ty, found := true, foundName := A_LoopFileName
-                    break
+                if ImageSearch(&tx, &ty, wx, scanTop, wx + ww - 1, wy + wh - 1, "*20 " A_LoopFileFullPath) {
+                    if (!found || priority < bestPriority) {
+                        targetX := tx, targetY := ty, found := true, foundName := A_LoopFileName, bestPriority := priority
+                    }
                 }
             }
         }
+
         if !AILeftHeld {
             Click("Left Down")
             AILeftHeld := true
         }
         if !found {
-            aiGatherStatus.Text := "Searching… tool click held. No saved token visible."
+            aiGatherStatus.Text := "In field: scanning bottom half. No token matched."
             AIReleaseMoveKeys()
+            if IsObject(AIOverlay)
+                AIOverlay.Hide()
+            AICurrentTokenKey := ""
             return
         }
+
+        tokenKey := foundName "|" Round(targetX / 12) "|" Round(targetY / 12)
+        if !AITokenFirstSeen.Has(tokenKey)
+            AITokenFirstSeen[tokenKey] := A_TickCount
+        AICurrentTokenKey := tokenKey
+        elapsedSeconds := Floor((A_TickCount - AITokenFirstSeen[tokenKey]) / 1000)
+        ShowTokenOverlay(targetX, targetY, elapsedSeconds)
+
         centerX := wx + Round(ww / 2), centerY := wy + Round(wh / 2)
         dx := targetX - centerX, dy := targetY - centerY
         speed := speedBox.Value + 0
@@ -522,11 +573,46 @@ AIGatherTick() {
         if Abs(dy) > 35
             keys.Push(dy < 0 ? "w" : "s")
         AISetMoveKeys(keys)
-        aiGatherStatus.Text := "Target: " foundName " | Haste " haste " stacks | adjusting movement."
+        aiGatherStatus.Text := "Token: " foundName " | priority " bestPriority " | seen " elapsedSeconds "s | haste " haste
         Sleep(duration)
     } catch as err {
         aiGatherStatus.Text := "AI gather error: " err.Message
     }
+}
+FolderHasImages(folder) {
+    Loop Files, folder "\*.*", "F" {
+        ext := StrLower(A_LoopFileExt)
+        if (ext = "png" || ext = "bmp" || ext = "jpg" || ext = "jpeg")
+            return true
+    }
+    return false
+}
+IsInField(folder, wx, wy, ww, wh) {
+    if !DirExist(folder)
+        return false
+    Loop Files, folder "\*.*", "F" {
+        ext := StrLower(A_LoopFileExt)
+        if !(ext = "png" || ext = "bmp" || ext = "jpg" || ext = "jpeg")
+            continue
+        if FindTemplate(A_LoopFileFullPath, wx, wy, wx + ww - 1, wy + wh - 1)
+            return true
+    }
+    return false
+}
+ShowTokenOverlay(x, y, elapsedSeconds) {
+    global AIOverlay, AIOverlayBox, AIOverlayTimer
+    if !IsObject(AIOverlay) {
+        AIOverlay := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x20")
+        AIOverlay.BackColor := "010101"
+        AIOverlay.SetFont("s10 Bold", "Segoe UI")
+        AIOverlayBox := AIOverlay.AddText("x0 y0 w62 h62 Border Center c00A8FF BackgroundTrans", "")
+        AIOverlayTimer := AIOverlay.AddText("x0 y64 w100 h22 Center cFFFFFF Background202020", "")
+        WinSetTransColor("010101", AIOverlay)
+    }
+    AIOverlayBox.Move(0, 0, 62, 62)
+    AIOverlayTimer.Move(0, 64, 100, 22)
+    AIOverlayTimer.Text := elapsedSeconds "s"
+    AIOverlay.Show("NA x" (x - 31) " y" (y - 31) " w100 h86")
 }
 AISetMoveKeys(keys) {
     global AIHeldKeys
