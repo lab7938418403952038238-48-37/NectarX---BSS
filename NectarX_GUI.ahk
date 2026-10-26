@@ -161,6 +161,14 @@ RunRoute() {
         [46438, "sc01E", true], [47656, "sc01E", false]
     ]
     try {
+        ; Send input to Roblox rather than leaving focus on the GUI.
+        if WinExist("ahk_exe RobloxPlayerBeta.exe") {
+            WinActivate("ahk_exe RobloxPlayerBeta.exe")
+            Sleep 500
+        } else {
+            MsgBox "Roblox was not detected. Open Bee Swarm Simulator, then press Start again.", "NectarX", "Icon!"
+            return
+        }
         Loop RouteCycles {
             cycle := A_Index
             if !WaitUntilRunnable()
