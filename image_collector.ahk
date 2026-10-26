@@ -30,6 +30,8 @@ global AIOverlay := 0
 global AIOverlayBox := 0
 global AIOverlayTimer := 0
 global RouteScriptsFolder := ""
+global GatherPaused := false
+global ActiveRoutePid := 0
 
 main := Gui("+Resize", "NectarX")
 main.BackColor := "55585D"
@@ -57,10 +59,16 @@ patternLabel := main.AddText("x105 y181 w150 h24 cEEEEEE", "Gather pattern")
 patternBox := main.AddDropDownList("x270 y176 w320 Choose1", ["Normal", "Corner-to-corner", "Zigzag", "Spiral", "Circular"])
 timerLabel := main.AddText("x105 y225 w150 h24 cEEEEEE", "Field timer (min)")
 timerBox := main.AddEdit("x270 y220 w120 Number", "10")
-startBtn := main.AddButton("x105 y330 w220 h46", "▶")
-stopBtn := main.AddButton("x345 y330 w220 h46", "■")
-gatherStatus := main.AddText("x105 y395 w470 h45 cEEEEEE", "Ready")
-startBtn.ToolTip := "Start gathering", stopBtn.ToolTip := "Stop gathering"
+hiveSlotLabel := main.AddText("x105 y265 w150 h24 cEEEEEE", "Hive slot")
+hiveSlotBox := main.AddDropDownList("x270 y260 w150 Choose1", ["Hive Slot 1", "Hive Slot 2", "Hive Slot 3", "Hive Slot 4", "Hive Slot 5", "Hive Slot 6"])
+bssSpeedLabel := main.AddText("x105 y300 w150 h24 cEEEEEE", "Move speed (no haste)")
+bssSpeedBox := main.AddEdit("x270 y295 w120 Number", "32.2")
+bssSpeedHint := main.AddText("x400 y299 w185 h24 cD0D0D0", "BSS stat value, e.g. 32.2")
+startBtn := main.AddButton("x105 y345 w220 h42", "▶ Start (F1)")
+stopBtn := main.AddButton("x345 y345 w220 h42", "■ Stop (F3)")
+pauseGatherBtn := main.AddButton("x105 y392 w220 h34", "Ⅱ Pause / Resume (F2)")
+gatherStatus := main.AddText("x345 y392 w235 h40 cEEEEEE", "Ready")
+startBtn.ToolTip := "Start macro (F1)", stopBtn.ToolTip := "Stop macro (F3)", pauseGatherBtn.ToolTip := "Pause/resume macro (F2)"
 
 ; Settings tab
 settingsPage := main.AddGroupBox("x82 y72 w550 h450", "")
@@ -148,6 +156,8 @@ webhookEnable := main.AddCheckbox("x105 y394 w280 h24", "Send activity updates t
 saveWebhookBtn := main.AddButton("x105 y424 w135 h32", "Save")
 testWebhookBtn := main.AddButton("x255 y424 w135 h32", "Test")
 webhookStatus := main.AddText("x400 y430 w175 h24 cEEEEEE", "")
+macroControlsLabel := main.AddText("x105 y465 w470 h20 cFFFFFF", "Macro controls: F1 Start  |  F2 Pause/Resume  |  F3 Stop")
+macroStateText := main.AddText("x105 y486 w470 h22 cD0D0D0", "Macro idle.")
 webhookBox.ToolTip := "Paste a Discord webhook URL. Keep it private."
 ; Images tab retains the screenshot/template collector.
 imagesPage := main.AddGroupBox("x82 y72 w550 h450", "")
@@ -179,6 +189,7 @@ spawnHive1Btn.OnEvent("Click", (*) => RunRouteScript("hive_slot_1.ahk"))
 toggleBtn.OnEvent("Click", ToggleSidebar)
 startBtn.OnEvent("Click", StartGather)
 stopBtn.OnEvent("Click", StopGather)
+pauseGatherBtn.OnEvent("Click", PauseGather)
 saveSettingsBtn.OnEvent("Click", SaveSettings)
 resetSettingsBtn.OnEvent("Click", ResetSettings)
 tokenImageBtn.OnEvent("Click", ChooseTokenImage)
@@ -193,6 +204,9 @@ testWebhookBtn.OnEvent("Click", TestWebhook)
 updateHoneyBtn.OnEvent("Click", UpdateHoneyStats)
 main.OnEvent("Close", ShutdownNectarX)
 Hotkey("F8", StopAIGather)
+Hotkey("F1", StartGather)
+Hotkey("F2", PauseGather)
+Hotkey("F3", StopGather)
 LoadSettings()
 LoadWebhook()
 LogActivity("NectarX ready. AI gathering uses visible image templates and approximate screen-relative movement.")
@@ -200,13 +214,13 @@ ShowPage("gather")
 main.Show("w650 h550")
 
 ShowPage(page) {
-    global gatherPage, gatherTitle, fieldLabel, fieldBox, patternLabel, patternBox, timerLabel, timerBox, startBtn, stopBtn, gatherStatus
+    global gatherPage, gatherTitle, fieldLabel, fieldBox, patternLabel, patternBox, timerLabel, timerBox, hiveSlotLabel, hiveSlotBox, bssSpeedLabel, bssSpeedBox, bssSpeedHint, startBtn, stopBtn, pauseGatherBtn, gatherStatus
     global settingsPage, settingsTitle, speedLabel, speedBox, speedHint, gameLabel, gameBox, detectLabel, detectBox, cameraLabel, cameraBox, scanRateLabel, scanRateBox, scanRateHint, saveSettingsBtn, resetSettingsBtn, settingsStatus
     global imagesPage, imagesTitle, categoryBox, nameBox, captureBtn, chooseBtn, clipBtn, saveBtn, statusText
     global visionPage, visionTitle, tokenImageLabel, tokenImageBox, tokenImageBtn, hasteFolderLabel, hasteFolderBox, hasteFolderBtn, visionStartBtn, visionStopBtn, visionStatus, visionRuleText, aiGatherTitle, aiTokenFolderLabel, aiTokenFolderBox, aiTokenFolderBtn, aiGatherStartBtn, aiGatherStopBtn, aiGatherStatus
-    global statusPage, statusTitle, activityLabel, activityText, logLabel, activityBox, honeyLabel, honeyBox, updateHoneyBtn, honeyStatsText, webhookLabel, webhookBox, webhookEnable, saveWebhookBtn, testWebhookBtn, webhookStatus
+    global statusPage, statusTitle, activityLabel, activityText, logLabel, activityBox, honeyLabel, honeyBox, updateHoneyBtn, honeyStatsText, webhookLabel, webhookBox, webhookEnable, saveWebhookBtn, testWebhookBtn, webhookStatus, macroControlsLabel, macroStateText
     global routesPage, routesTitle, routesFolderLabel, routesFolderBox, routesFolderBtn, routesInfo, routesStatus, routeButtons, spawnHive1Btn
-    for c in [gatherPage,gatherTitle,fieldLabel,fieldBox,patternLabel,patternBox,timerLabel,timerBox,startBtn,stopBtn,gatherStatus]
+    for c in [gatherPage,gatherTitle,fieldLabel,fieldBox,patternLabel,patternBox,timerLabel,timerBox,hiveSlotLabel,hiveSlotBox,bssSpeedLabel,bssSpeedBox,bssSpeedHint,startBtn,stopBtn,pauseGatherBtn,gatherStatus]
         c.Visible := page = "gather"
     for c in [settingsPage,settingsTitle,speedLabel,speedBox,speedHint,gameLabel,gameBox,detectLabel,detectBox,cameraLabel,cameraBox,scanRateLabel,scanRateBox,scanRateHint,saveSettingsBtn,resetSettingsBtn,settingsStatus]
         c.Visible := page = "settings"
@@ -218,7 +232,7 @@ ShowPage(page) {
         c.Visible := page = "routes"
     for c in [imagesPage,imagesTitle,categoryBox,nameBox,captureBtn,chooseBtn,clipBtn,saveBtn,statusText]
         c.Visible := page = "images"
-    for c in [statusPage,statusTitle,activityLabel,activityText,logLabel,activityBox,honeyLabel,honeyBox,updateHoneyBtn,honeyStatsText,webhookLabel,webhookBox,webhookEnable,saveWebhookBtn,testWebhookBtn,webhookStatus]
+    for c in [statusPage,statusTitle,activityLabel,activityText,logLabel,activityBox,honeyLabel,honeyBox,updateHoneyBtn,honeyStatsText,webhookLabel,webhookBox,webhookEnable,saveWebhookBtn,testWebhookBtn,webhookStatus,macroControlsLabel,macroStateText]
         c.Visible := page = "status"
     if (page = "status")
         RefreshActivity()
