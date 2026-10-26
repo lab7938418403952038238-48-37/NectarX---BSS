@@ -19,6 +19,8 @@ global VisionRunning := false
 global LastVisionState := ""
 global LastHasteStacks := -1
 global AIGatherRunning := false
+ global GatherTimerRunning := false
+ global GatherTimerEndTick := 0
 global AITokenFolder := ""
 global AIHeldKeys := []
 global AILeftHeld := false
@@ -53,10 +55,8 @@ fieldLabel := main.AddText("x105 y137 w150 h24 cEEEEEE", "Field")
 fieldBox := main.AddDropDownList("x270 y132 w320 Choose1", ["Sunflower Field", "Dandelion Field", "Mushroom Field", "Blue Flower Field", "Clover Field", "Spider Field", "Bamboo Field", "Strawberry Field", "Pineapple Patch", "Stump Field", "Cactus Field", "Pumpkin Patch", "Pine Tree Forest", "Rose Field", "Mountain Top Field", "Pepper Patch", "Coconut Field"])
 patternLabel := main.AddText("x105 y181 w150 h24 cEEEEEE", "Gather pattern")
 patternBox := main.AddDropDownList("x270 y176 w320 Choose1", ["Normal", "Corner-to-corner", "Zigzag", "Spiral", "Circular"])
-durationLabel := main.AddText("x105 y225 w150 h24 cEEEEEE", "Gather duration (min)")
-durationBox := main.AddEdit("x270 y220 w120 Number", "10")
-repeatLabel := main.AddText("x105 y269 w150 h24 cEEEEEE", "Pattern repeats")
-repeatBox := main.AddEdit("x270 y264 w120 Number", "3")
+timerLabel := main.AddText("x105 y225 w150 h24 cEEEEEE", "Field timer (min)")
+timerBox := main.AddEdit("x270 y220 w120 Number", "10")
 startBtn := main.AddButton("x105 y330 w220 h46", "▶")
 stopBtn := main.AddButton("x345 y330 w220 h46", "■")
 gatherStatus := main.AddText("x105 y395 w470 h45 cEEEEEE", "Ready")
@@ -197,13 +197,13 @@ ShowPage("gather")
 main.Show("w650 h550")
 
 ShowPage(page) {
-    global gatherPage, gatherTitle, fieldLabel, fieldBox, patternLabel, patternBox, durationLabel, durationBox, repeatLabel, repeatBox, startBtn, stopBtn, gatherStatus
+    global gatherPage, gatherTitle, fieldLabel, fieldBox, patternLabel, patternBox, timerLabel, timerBox, startBtn, stopBtn, gatherStatus
     global settingsPage, settingsTitle, speedLabel, speedBox, speedHint, gameLabel, gameBox, detectLabel, detectBox, cameraLabel, cameraBox, scanRateLabel, scanRateBox, scanRateHint, saveSettingsBtn, resetSettingsBtn, settingsStatus
     global imagesPage, imagesTitle, categoryBox, nameBox, captureBtn, chooseBtn, clipBtn, saveBtn, statusText
     global visionPage, visionTitle, tokenImageLabel, tokenImageBox, tokenImageBtn, hasteFolderLabel, hasteFolderBox, hasteFolderBtn, visionStartBtn, visionStopBtn, visionStatus, visionRuleText, aiGatherTitle, aiTokenFolderLabel, aiTokenFolderBox, aiTokenFolderBtn, aiGatherStartBtn, aiGatherStopBtn, aiGatherStatus
     global statusPage, statusTitle, activityLabel, activityText, logLabel, activityBox, honeyLabel, honeyBox, updateHoneyBtn, honeyStatsText, webhookLabel, webhookBox, webhookEnable, saveWebhookBtn, testWebhookBtn, webhookStatus
     global routesPage, routesTitle, routesFolderLabel, routesFolderBox, routesFolderBtn, routesInfo, routesStatus, routeButtons
-    for c in [gatherPage,gatherTitle,fieldLabel,fieldBox,patternLabel,patternBox,durationLabel,durationBox,repeatLabel,repeatBox,startBtn,stopBtn,gatherStatus]
+    for c in [gatherPage,gatherTitle,fieldLabel,fieldBox,patternLabel,patternBox,timerLabel,timerBox,startBtn,stopBtn,gatherStatus]
         c.Visible := page = "gather"
     for c in [settingsPage,settingsTitle,speedLabel,speedBox,speedHint,gameLabel,gameBox,detectLabel,detectBox,cameraLabel,cameraBox,scanRateLabel,scanRateBox,scanRateHint,saveSettingsBtn,resetSettingsBtn,settingsStatus]
         c.Visible := page = "settings"
@@ -237,23 +237,52 @@ ToggleSidebar(*) {
     }
 }
 StartGather(*) {
-    global gatherStatus, durationBox, repeatBox, fieldBox, patternBox
-    if (Trim(durationBox.Value) = "" || !IsNumber(durationBox.Value) || durationBox.Value <= 0) {
-        MsgBox("Enter a gather duration greater than zero.", "NectarX", "Icon!")
+    global gatherStatus, timerBox, fieldBox, patternBox, GatherTimerRunning, GatherTimerEndTick
+    if (Trim(timerBox.Value) = "" || !IsNumber(timerBox.Value) || timerBox.Value <= 0 || timerBox.Value > 1440) {
+        MsgBox("Enter a field timer from 1 to 1440 minutes.", "NectarX", "Icon!")
         return
     }
-    if (Trim(repeatBox.Value) = "" || !IsNumber(repeatBox.Value) || repeatBox.Value <= 0) {
-        MsgBox("Enter pattern repeats greater than zero.", "NectarX", "Icon!")
+    if GatherTimerRunning {
+        MsgBox("The field timer is already running. Stop it before starting another.", "NectarX", "Iconi")
         return
     }
-    gatherStatus.Text := "Gather options are set; automation runner is not connected yet."
-    LogActivity("Gather requested for " fieldBox.Text " using " patternBox.Text ". Runner is not connected.")
-    MsgBox("The Gather interface is ready, but the movement automation is not connected yet.", "NectarX", "Iconi")
+    minutes := Number(timerBox.Value)
+    GatherTimerEndTick := A_TickCount + Round(minutes * 60000)
+    GatherTimerRunning := true
+    gatherStatus.Text := "Field timer running: " FormatSeconds(Round(minutes * 60)) ". Return-to-hive script will launch when it ends. Gathering movement is not connected yet."
+    LogActivity("Field timer started for " fieldBox.Text " (" patternBox.Text "), " minutes " minute(s).")
+    SetTimer(GatherTimerTick, 1000)
+}
+GatherTimerTick() {
+    global GatherTimerRunning, GatherTimerEndTick, gatherStatus
+    if !GatherTimerRunning {
+        SetTimer(GatherTimerTick, 0)
+        return
+    }
+    remaining := Max(0, Ceil((GatherTimerEndTick - A_TickCount) / 1000))
+    if (remaining > 0) {
+        gatherStatus.Text := "Field timer: " FormatSeconds(remaining) ". Return-to-hive script runs at zero. Gathering movement is not connected yet."
+        return
+    }
+    GatherTimerRunning := false
+    SetTimer(GatherTimerTick, 0)
+    gatherStatus.Text := "Timer finished. Launching return-to-hive script…"
+    LogActivity("Field timer finished; launching field_to_hive.ahk.")
+    RunRouteScript("field_to_hive.ahk")
+}
+FormatSeconds(totalSeconds) {
+    totalSeconds := Max(0, totalSeconds)
+    mins := Floor(totalSeconds / 60)
+    secs := Mod(totalSeconds, 60)
+    return Format("{:02}:{:02}", mins, secs)
 }
 StopGather(*) {
-    global gatherStatus
-    gatherStatus.Text := "No active gather runner."
-    LogActivity("Stop requested. No gather runner was active.")
+    global gatherStatus, GatherTimerRunning
+    wasRunning := GatherTimerRunning
+    GatherTimerRunning := false
+    SetTimer(GatherTimerTick, 0)
+    gatherStatus.Text := wasRunning ? "Field timer stopped." : "Timer is idle."
+    LogActivity(wasRunning ? "Field timer stopped by user." : "Stop requested while timer was idle.")
 }
 SaveSettings(*) {
     global RootDir, speedBox, gameBox, detectBox, cameraBox, scanRateBox, tokenImageBox, hasteFolderBox, aiTokenFolderBox, routesFolderBox, settingsStatus
