@@ -122,11 +122,10 @@ RunRoute() {
             ToolTip "NectarX: cycle " cycle "/6 — checking hive image"
             if FindClaimImage(ClaimImage) {
                 Send "{e}"
-                Running := false
-                StopRequested := true
-                ToolTip "NectarX: hive image found — E pressed; stopped"
-                SetTimer () => ToolTip(), -2500
-                return
+                ReleaseMovementKeys()
+                ToolTip "NectarX: hive image found — E pressed; exiting"
+                Sleep 500
+                ExitApp
             }
         }
         if !StopRequested {
@@ -153,8 +152,10 @@ WaitForRecordingTime(cycleStart, targetMs) {
         if FindClaimImage(ClaimImage) {
             ReleaseMovementKeys()
             Send "{e}"
-            StopRoute()
-            return false
+            ReleaseMovementKeys()
+            ToolTip "NectarX: hive image found — E pressed; exiting"
+            Sleep 500
+            ExitApp
         }
         Sleep 200
     }
