@@ -847,12 +847,12 @@ SendWebhook(message, force := false) {
         perMin := perSec * 60
         perHour := perSec * 3600
         graph := BuildHoneyGraph(perSec, perMin, perHour)
-        description := "**Session honey:** " FormatHoney(HoneySession) "`n" 
-            . "**Honey / second:** " FormatHoney(perSec) "`n"
-            . "**Honey / minute:** " FormatHoney(perMin) "`n"
-            . "**Average / hour:** " FormatHoney(perHour) "`n`n"
-            . "```text`n" graph "`n```"
-            . "`n**Activity:** " message
+        description := "**Session honey:** " . FormatHoney(HoneySession) . "`n"
+            . "**Honey / second:** " . FormatHoney(perSec) . "`n"
+            . "**Honey / minute:** " . FormatHoney(perMin) . "`n"
+            . "**Average / hour:** " . FormatHoney(perHour) . "`n`n"
+            . "```text`n" . graph . "`n```"
+            . "`n**Activity:** " . message
         body := "{""embeds"":[{""title"":""NectarX | Honey Analytics"",""description"":""" JsonEscape(description) """,""color"":1477631,""footer"":{""text"":""NectarX • This session""}}]}"
         request := ComObject("WinHttp.WinHttpRequest.5.1")
         request.Open("POST", WebhookUrl, false)
