@@ -22,6 +22,7 @@ global AIGatherRunning := false
 global AITokenFolder := ""
 global AIHeldKeys := []
 global AILeftHeld := false
+global RouteScriptsFolder := ""
 
 main := Gui("+Resize", "NectarX")
 main.BackColor := "55585D"
@@ -36,7 +37,8 @@ settingsTab := main.AddButton("x9 y173 w46 h44", "⚙")
 imagesTab := main.AddButton("x9 y227 w46 h44", "▧")
 statusTab := main.AddButton("x9 y281 w46 h44", "◷")
 visionTab := main.AddButton("x9 y335 w46 h44", "◎")
-gatherTab.ToolTip := "Gather", settingsTab.ToolTip := "Settings", imagesTab.ToolTip := "Images", statusTab.ToolTip := "Status", visionTab.ToolTip := "Screen reader"
+routesTab := main.AddButton("x9 y389 w46 h44", "⌂")
+gatherTab.ToolTip := "Gather", settingsTab.ToolTip := "Settings", imagesTab.ToolTip := "Images", statusTab.ToolTip := "Status", visionTab.ToolTip := "Screen reader", routesTab.ToolTip := "Hive & routes"
 
 ; Gather tab
 gatherPage := main.AddGroupBox("x82 y72 w550 h450", "")
@@ -99,6 +101,28 @@ aiGatherStartBtn := main.AddButton("x105 y412 w220 h34", "Start AI gathering")
 aiGatherStopBtn := main.AddButton("x345 y412 w220 h34", "Stop AI")
 aiGatherStatus := main.AddText("x105 y448 w470 h22 cEEEEEE", "Stopped. Choose token templates. Press F8 to stop safely.")
 
+; Hive & Routes tab: launches user-supplied route scripts from a selected folder.
+ routesPage := main.AddGroupBox("x82 y72 w550 h450", "")
+ routesTitle := main.AddText("x105 y91 w490 h30 cF0F0F0", "⌂  Hive & Routes")
+ routesTitle.SetFont("s16 Bold", "Segoe UI")
+ routesFolderLabel := main.AddText("x105 y127 w470 h22 cEEEEEE", "Folder containing your route .ahk scripts")
+ routesFolderBox := main.AddEdit("x105 y150 w365 h26 ReadOnly")
+ routesFolderBtn := main.AddButton("x480 y149 w95 h28", "Choose")
+ routesInfo := main.AddText("x105 y183 w470 h42 cD0D0D0", "Name scripts exactly as listed. These buttons launch scripts you create; NectarX does not guess map coordinates.")
+ routeButtons := []
+ routeSpecs := [["hive_slot_1.ahk", "Hive slot 1 — by red cannon ramp"], ["hive_slot_2.ahk", "Hive slot 2"], ["hive_slot_3.ahk", "Hive slot 3"], ["hive_slot_4.ahk", "Hive slot 4"], ["hive_slot_5.ahk", "Hive slot 5"], ["hive_slot_6.ahk", "Hive slot 6 — by Noob Shop"], ["field_to_hive.ahk", "Field → Hive"], ["hive_to_red_cannon.ahk", "Hive → Red Cannon"], ["hive_to_field.ahk", "Hive → Field"], ["custom_route.ahk", "Other / custom route"]]
+ for i, spec in routeSpecs {
+     col := i <= 5 ? 0 : 1
+     row := Mod(i - 1, 5)
+     x := col = 0 ? 105 : 350
+     y := 235 + row * 42
+     label := main.AddText("x" x " y" (y+5) " w165 h28 cEEEEEE", spec[2])
+     btn := main.AddButton("x" (x+170) " y" y " w70 h30", "Run")
+     btn.OnEvent("Click", RunRouteScript.Bind(spec[1]))
+     routeButtons.Push(label), routeButtons.Push(btn)
+ }
+ routesStatus := main.AddText("x105 y448 w470 h22 cD0D0D0", "Idle. F8 stops AI gathering; it does not stop separate route scripts.")
+
 ; Status tab: current activity, event history, and Discord notification settings.
 statusPage := main.AddGroupBox("x82 y72 w550 h450", "")
 statusTitle := main.AddText("x105 y91 w490 h30 cF0F0F0", "◷")
@@ -142,6 +166,8 @@ settingsTab.OnEvent("Click", (*) => ShowPage("settings"))
 imagesTab.OnEvent("Click", (*) => ShowPage("images"))
 statusTab.OnEvent("Click", (*) => ShowPage("status"))
 visionTab.OnEvent("Click", (*) => ShowPage("vision"))
+routesTab.OnEvent("Click", (*) => ShowPage("routes"))
+routesFolderBtn.OnEvent("Click", ChooseRouteScriptsFolder)
 toggleBtn.OnEvent("Click", ToggleSidebar)
 startBtn.OnEvent("Click", StartGather)
 stopBtn.OnEvent("Click", StopGather)
@@ -171,12 +197,17 @@ ShowPage(page) {
     global imagesPage, imagesTitle, categoryBox, nameBox, captureBtn, chooseBtn, clipBtn, saveBtn, statusText
     global visionPage, visionTitle, tokenImageLabel, tokenImageBox, tokenImageBtn, hasteFolderLabel, hasteFolderBox, hasteFolderBtn, visionStartBtn, visionStopBtn, visionStatus, visionRuleText, aiGatherTitle, aiTokenFolderLabel, aiTokenFolderBox, aiTokenFolderBtn, aiGatherStartBtn, aiGatherStopBtn, aiGatherStatus
     global statusPage, statusTitle, activityLabel, activityText, logLabel, activityBox, honeyLabel, honeyBox, updateHoneyBtn, honeyStatsText, webhookLabel, webhookBox, webhookEnable, saveWebhookBtn, testWebhookBtn, webhookStatus
+    global routesPage, routesTitle, routesFolderLabel, routesFolderBox, routesFolderBtn, routesInfo, routesStatus, routeButtons
     for c in [gatherPage,gatherTitle,fieldLabel,fieldBox,patternLabel,patternBox,durationLabel,durationBox,repeatLabel,repeatBox,startBtn,stopBtn,gatherStatus]
         c.Visible := page = "gather"
     for c in [settingsPage,settingsTitle,speedLabel,speedBox,speedHint,gameLabel,gameBox,detectLabel,detectBox,cameraLabel,cameraBox,scanRateLabel,scanRateBox,scanRateHint,saveSettingsBtn,resetSettingsBtn,settingsStatus]
         c.Visible := page = "settings"
     for c in [visionPage,visionTitle,tokenImageLabel,tokenImageBox,tokenImageBtn,hasteFolderLabel,hasteFolderBox,hasteFolderBtn,visionStartBtn,visionStopBtn,visionStatus,visionRuleText,aiGatherTitle,aiTokenFolderLabel,aiTokenFolderBox,aiTokenFolderBtn,aiGatherStartBtn,aiGatherStopBtn,aiGatherStatus]
         c.Visible := page = "vision"
+    routesPage.Visible := page = "routes"
+    routesTitle.Visible := page = "routes", routesFolderLabel.Visible := page = "routes", routesFolderBox.Visible := page = "routes", routesFolderBtn.Visible := page = "routes", routesInfo.Visible := page = "routes", routesStatus.Visible := page = "routes"
+    for c in routeButtons
+        c.Visible := page = "routes"
     for c in [imagesPage,imagesTitle,categoryBox,nameBox,captureBtn,chooseBtn,clipBtn,saveBtn,statusText]
         c.Visible := page = "images"
     for c in [statusPage,statusTitle,activityLabel,activityText,logLabel,activityBox,honeyLabel,honeyBox,updateHoneyBtn,honeyStatsText,webhookLabel,webhookBox,webhookEnable,saveWebhookBtn,testWebhookBtn,webhookStatus]
@@ -220,13 +251,13 @@ StopGather(*) {
     LogActivity("Stop requested. No gather runner was active.")
 }
 SaveSettings(*) {
-    global RootDir, speedBox, gameBox, detectBox, cameraBox, scanRateBox, tokenImageBox, hasteFolderBox, aiTokenFolderBox, settingsStatus
+    global RootDir, speedBox, gameBox, detectBox, cameraBox, scanRateBox, tokenImageBox, hasteFolderBox, aiTokenFolderBox, routesFolderBox, settingsStatus
     speed := Trim(speedBox.Value)
     if (speed = "" || !IsNumber(speed) || speed <= 0 || speed > 5) {
         MsgBox("Move speed must be greater than 0 and no more than 5.", "NectarX", "Icon!")
         return
     }
-    data := "move_speed=" speed "`n" . "game=" gameBox.Text "`n" . "game_detection=" detectBox.Text "`n" . "camera=" cameraBox.Text "`n" . "screen_reads_per_sec=" scanRateBox.Text "`n" . "token_line_image=" tokenImageBox.Value "`n" . "haste_image_folder=" hasteFolderBox.Value "`n" . "ai_token_folder=" aiTokenFolderBox.Value "`n"
+    data := "move_speed=" speed "`n" . "game=" gameBox.Text "`n" . "game_detection=" detectBox.Text "`n" . "camera=" cameraBox.Text "`n" . "screen_reads_per_sec=" scanRateBox.Text "`n" . "token_line_image=" tokenImageBox.Value "`n" . "haste_image_folder=" hasteFolderBox.Value "`n" . "ai_token_folder=" aiTokenFolderBox.Value "`n" . "route_scripts_folder=" routesFolderBox.Value "`n"
     path := RootDir "\nectarx_settings.ini"
     try {
         if FileExist(path)
@@ -239,7 +270,7 @@ SaveSettings(*) {
     }
 }
 LoadSettings() {
-    global RootDir, speedBox, gameBox, detectBox, cameraBox, scanRateBox, tokenImageBox, hasteFolderBox, aiTokenFolderBox
+    global RootDir, speedBox, gameBox, detectBox, cameraBox, scanRateBox, tokenImageBox, hasteFolderBox, aiTokenFolderBox, routesFolderBox
     path := RootDir "\nectarx_settings.ini"
     if !FileExist(path)
         return
@@ -264,6 +295,8 @@ LoadSettings() {
                 hasteFolderBox.Value := SubStr(line, StrLen("haste_image_folder=") + 1)
             else if (parts[1] = "ai_token_folder")
                 aiTokenFolderBox.Value := SubStr(line, StrLen("ai_token_folder=") + 1)
+            else if (parts[1] = "route_scripts_folder")
+                routesFolderBox.Value := SubStr(line, StrLen("route_scripts_folder=") + 1)
         }
     }
 }
@@ -364,6 +397,36 @@ ChooseAITokenFolder(*) {
     AITokenFolder := folder
     aiTokenFolderBox.Value := folder
 }
+ChooseRouteScriptsFolder(*) {
+    global RouteScriptsFolder, routesFolderBox, routesStatus
+    folder := DirSelect(, 1, "Choose folder containing your NectarX route scripts")
+    if (folder = "")
+        return
+    RouteScriptsFolder := folder
+    routesFolderBox.Value := folder
+    routesStatus.Text := "Folder selected. Save Settings to remember it."
+}
+RunRouteScript(fileName, *) {
+    global RouteScriptsFolder, routesFolderBox, routesStatus
+    folder := Trim(routesFolderBox.Value)
+    if (folder = "" || !DirExist(folder)) {
+        MsgBox("Choose a valid route scripts folder first.", "NectarX", "Icon!")
+        return
+    }
+    path := folder "\\" fileName
+    if !FileExist(path) {
+        MsgBox("Script not found:`n" path "`n`nCreate this .ahk file in your selected folder, then try again.", "NectarX", "Icon!")
+        return
+    }
+    try {
+        Run('"' A_AhkPath '" "' path '"', folder)
+        routesStatus.Text := "Launched: " fileName
+        LogActivity("Route script launched: " fileName)
+    } catch as err {
+        routesStatus.Text := "Launch failed: " err.Message
+    }
+}
+
 StartAIGather(*) {
     global AIGatherRunning, AITokenFolder, aiTokenFolderBox, aiGatherStatus
     AITokenFolder := Trim(aiTokenFolderBox.Value)
@@ -450,7 +513,7 @@ AIGatherTick() {
         centerX := wx + Round(ww / 2), centerY := wy + Round(wh / 2)
         dx := targetX - centerX, dy := targetY - centerY
         speed := speedBox.Value + 0
-        hasteMultiplier := 1 + (haste * 0.10)
+        hasteMultiplier := 1.1 ** haste
         duration := Round((Abs(dx) + Abs(dy)) / Max(1, 2.2 * Max(0.2, speed) * hasteMultiplier))
         duration := Min(220, Max(35, duration))
         keys := []
