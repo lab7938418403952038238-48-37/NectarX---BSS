@@ -505,6 +505,7 @@ AIGatherTick() {
             if IsObject(AIOverlay)
                 AIOverlay.Hide()
             AICurrentTokenKey := ""
+            AITokenFirstSeen := Map()
             return
         }
 
@@ -551,6 +552,7 @@ AIGatherTick() {
             if IsObject(AIOverlay)
                 AIOverlay.Hide()
             AICurrentTokenKey := ""
+            AITokenFirstSeen := Map()
             return
         }
 
@@ -559,7 +561,7 @@ AIGatherTick() {
             AITokenFirstSeen[tokenKey] := A_TickCount
         AICurrentTokenKey := tokenKey
         elapsedSeconds := Floor((A_TickCount - AITokenFirstSeen[tokenKey]) / 1000)
-        ShowTokenOverlay(targetX, targetY, elapsedSeconds)
+        ShowTokenOverlay(targetX + 31, targetY + 31, elapsedSeconds)
 
         centerX := wx + Round(ww / 2), centerY := wy + Round(wh / 2)
         dx := targetX - centerX, dy := targetY - centerY
