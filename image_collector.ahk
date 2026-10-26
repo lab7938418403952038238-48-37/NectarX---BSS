@@ -443,7 +443,7 @@ StartAIGather(*) {
         MsgBox("Open Bee Swarm Simulator in Roblox first.", "NectarX", "Icon!")
         return
     }
-    fieldFolder := RootDir "\\NectarX images\\fields_landmarks"
+    fieldFolder := RootDir "\NectarX images\fields_landmarks"
     if !DirExist(fieldFolder) || !FolderHasImages(fieldFolder) {
         MsgBox("AI gathering requires field-landmark images to detect when you are actually in a field.`n`nAdd clear cropped landmark images to:`n" fieldFolder, "NectarX", "Icon!")
         return
@@ -490,6 +490,10 @@ AIGatherTick() {
         if IsObject(AIOverlay)
             AIOverlay.Hide()
         AIReleaseMoveKeys()
+        if AILeftHeld {
+            Click("Left Up")
+            AILeftHeld := false
+        }
         return
     }
     try {
@@ -502,6 +506,10 @@ AIGatherTick() {
         if !IsInField(fieldFolder, wx, wy, ww, wh) {
             aiGatherStatus.Text := "Paused: no field landmark detected. Move into a field."
             AIReleaseMoveKeys()
+            if AILeftHeld {
+                Click("Left Up")
+                AILeftHeld := false
+            }
             if IsObject(AIOverlay)
                 AIOverlay.Hide()
             AICurrentTokenKey := ""
