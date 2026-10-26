@@ -11,86 +11,170 @@ global CurrentImage := ""
 main := Gui("+Resize", "NectarX")
 main.BackColor := "55585D"
 main.SetFont("s10", "Segoe UI")
-main.MarginX := 0
-main.MarginY := 0
-
-; Minimal logo in the upper-left; the vertical icon rail sits directly below it.
-logo := main.AddText("x18 y16 w46 h46 Center 0x200 cF0F0F0", "⬡")
+main.MarginX := 0, main.MarginY := 0
+logo := main.AddText("x16 y12 w46 h46 Center 0x200 cF0F0F0", "⬡")
 logo.SetFont("s28", "Segoe UI Symbol")
-sidebar := main.AddText("x0 y72 w64 h430 Background:44474B", "")
-toggleBtn := main.AddButton("x15 y82 w34 h32", "‹")
-captureTab := main.AddButton("x12 y132 w40 h40", "◉")
-fileTab := main.AddButton("x12 y182 w40 h40", "▧")
-clipTab := main.AddButton("x12 y232 w40 h40", "▣")
-saveTab := main.AddButton("x12 y282 w40 h40", "↓")
+sidebar := main.AddText("x0 y66 w64 h470 Background:44474B", "")
+toggleBtn := main.AddButton("x15 y74 w34 h30", "‹")
+gatherTab := main.AddButton("x9 y119 w46 h44", "◈")
+settingsTab := main.AddButton("x9 y173 w46 h44", "⚙")
+imagesTab := main.AddButton("x9 y227 w46 h44", "▧")
+gatherTab.ToolTip := "Gather", settingsTab.ToolTip := "Settings", imagesTab.ToolTip := "Images"
 
-categoryBox := main.AddDropDownList("x100 y105 w470 Choose1", Categories)
-nameBox := main.AddEdit("x100 y150 w470")
-captureBtn := main.AddButton("x100 y205 w470 h38", "◉")
-chooseBtn := main.AddButton("x100 y253 w470 h38", "▧")
-clipBtn := main.AddButton("x100 y301 w470 h38", "▣")
-saveBtn := main.AddButton("x100 y357 w470 h42 Default", "↓")
-statusText := main.AddText("x100 y414 w470 h62 cEEEEEE", "")
+; Gather tab
+gatherPage := main.AddGroupBox("x82 y72 w550 h450", "")
+gatherTitle := main.AddText("x105 y91 w490 h30 cF0F0F0", "◈")
+gatherTitle.SetFont("s16 Bold", "Segoe UI")
+fieldLabel := main.AddText("x105 y137 w150 h24 cEEEEEE", "Field")
+fieldBox := main.AddDropDownList("x270 y132 w320 Choose1", ["Sunflower Field", "Dandelion Field", "Mushroom Field", "Blue Flower Field", "Clover Field", "Spider Field", "Bamboo Field", "Strawberry Field", "Pineapple Patch", "Stump Field", "Cactus Field", "Pumpkin Patch", "Pine Tree Forest", "Rose Field", "Mountain Top Field", "Pepper Patch", "Coconut Field"])
+patternLabel := main.AddText("x105 y181 w150 h24 cEEEEEE", "Gather pattern")
+patternBox := main.AddDropDownList("x270 y176 w320 Choose1", ["Normal", "Corner-to-corner", "Zigzag", "Spiral", "Circular"])
+durationLabel := main.AddText("x105 y225 w150 h24 cEEEEEE", "Gather duration (min)")
+durationBox := main.AddEdit("x270 y220 w120 Number", "10")
+repeatLabel := main.AddText("x105 y269 w150 h24 cEEEEEE", "Pattern repeats")
+repeatBox := main.AddEdit("x270 y264 w120 Number", "3")
+startBtn := main.AddButton("x105 y330 w220 h46", "▶")
+stopBtn := main.AddButton("x345 y330 w220 h46", "■")
+gatherStatus := main.AddText("x105 y395 w470 h45 cEEEEEE", "Ready")
+startBtn.ToolTip := "Start gathering", stopBtn.ToolTip := "Stop gathering"
 
-; Tooltips provide guidance without adding visible labels.
-toggleBtn.ToolTip := "Expand or collapse the sidebar"
-captureTab.ToolTip := "Capture screen"
-fileTab.ToolTip := "Choose image file"
-clipTab.ToolTip := "Use clipboard image"
-saveTab.ToolTip := "Save image"
-categoryBox.ToolTip := "Image category"
-nameBox.ToolTip := "Image name"
+; Settings tab
+settingsPage := main.AddGroupBox("x82 y72 w550 h450", "")
+settingsTitle := main.AddText("x105 y91 w490 h30 cF0F0F0", "⚙")
+settingsTitle.SetFont("s16 Bold", "Segoe UI")
+speedLabel := main.AddText("x105 y137 w155 h24 cEEEEEE", "Player move speed")
+speedBox := main.AddEdit("x270 y132 w120", "1.0")
+speedHint := main.AddText("x400 y136 w185 h24 cD0D0D0", "1.0 = default scale")
+gameLabel := main.AddText("x105 y181 w155 h24 cEEEEEE", "Game")
+gameBox := main.AddDropDownList("x270 y176 w320 Choose1", ["Roblox - Bee Swarm Simulator"])
+detectLabel := main.AddText("x105 y225 w155 h24 cEEEEEE", "Game detection")
+detectBox := main.AddDropDownList("x270 y220 w320 Choose1", ["Auto-detect Roblox", "Manual window selection"])
+cameraLabel := main.AddText("x105 y269 w155 h24 cEEEEEE", "Camera style")
+cameraBox := main.AddDropDownList("x270 y264 w320 Choose1", ["Default", "More zoomed out", "More zoomed in"])
+saveSettingsBtn := main.AddButton("x105 y330 w220 h42", "✓")
+resetSettingsBtn := main.AddButton("x345 y330 w220 h42", "↺")
+settingsStatus := main.AddText("x105 y390 w470 h40 cEEEEEE", "")
+saveSettingsBtn.ToolTip := "Save settings", resetSettingsBtn.ToolTip := "Reset settings"
+
+; Images tab retains the screenshot/template collector.
+imagesPage := main.AddGroupBox("x82 y72 w550 h450", "")
+imagesTitle := main.AddText("x105 y91 w490 h30 cF0F0F0", "▧")
+imagesTitle.SetFont("s16 Bold", "Segoe UI")
+categoryBox := main.AddDropDownList("x105 y132 w470 Choose1", Categories)
+nameBox := main.AddEdit("x105 y174 w470")
+captureBtn := main.AddButton("x105 y220 w105 h40", "◉")
+chooseBtn := main.AddButton("x225 y220 w105 h40", "▧")
+clipBtn := main.AddButton("x345 y220 w105 h40", "▣")
+saveBtn := main.AddButton("x465 y220 w110 h40 Default", "↓")
+statusText := main.AddText("x105 y278 w470 h80 cEEEEEE", "")
+categoryBox.ToolTip := "Image category", nameBox.ToolTip := "Image name"
+captureBtn.ToolTip := "Capture screen", chooseBtn.ToolTip := "Choose image"
+clipBtn.ToolTip := "Use clipboard image", saveBtn.ToolTip := "Save image"
 
 captureBtn.OnEvent("Click", CaptureScreen)
 chooseBtn.OnEvent("Click", ChooseImage)
 clipBtn.OnEvent("Click", SaveClipboardImage)
 saveBtn.OnEvent("Click", SaveImage)
-captureTab.OnEvent("Click", CaptureScreen)
-fileTab.OnEvent("Click", ChooseImage)
-clipTab.OnEvent("Click", SaveClipboardImage)
-saveTab.OnEvent("Click", SaveImage)
+gatherTab.OnEvent("Click", (*) => ShowPage("gather"))
+settingsTab.OnEvent("Click", (*) => ShowPage("settings"))
+imagesTab.OnEvent("Click", (*) => ShowPage("images"))
 toggleBtn.OnEvent("Click", ToggleSidebar)
+startBtn.OnEvent("Click", StartGather)
+stopBtn.OnEvent("Click", StopGather)
+saveSettingsBtn.OnEvent("Click", SaveSettings)
+resetSettingsBtn.OnEvent("Click", ResetSettings)
 main.OnEvent("Close", (*) => ExitApp())
-main.Show("w650 h520")
+LoadSettings()
+ShowPage("gather")
+main.Show("w650 h550")
 
+ShowPage(page) {
+    global gatherPage, gatherTitle, fieldLabel, fieldBox, patternLabel, patternBox, durationLabel, durationBox, repeatLabel, repeatBox, startBtn, stopBtn, gatherStatus
+    global settingsPage, settingsTitle, speedLabel, speedBox, speedHint, gameLabel, gameBox, detectLabel, detectBox, cameraLabel, cameraBox, saveSettingsBtn, resetSettingsBtn, settingsStatus
+    global imagesPage, imagesTitle, categoryBox, nameBox, captureBtn, chooseBtn, clipBtn, saveBtn, statusText
+    for c in [gatherPage,gatherTitle,fieldLabel,fieldBox,patternLabel,patternBox,durationLabel,durationBox,repeatLabel,repeatBox,startBtn,stopBtn,gatherStatus]
+        c.Visible := page = "gather"
+    for c in [settingsPage,settingsTitle,speedLabel,speedBox,speedHint,gameLabel,gameBox,detectLabel,detectBox,cameraLabel,cameraBox,saveSettingsBtn,resetSettingsBtn,settingsStatus]
+        c.Visible := page = "settings"
+    for c in [imagesPage,imagesTitle,categoryBox,nameBox,captureBtn,chooseBtn,clipBtn,saveBtn,statusText]
+        c.Visible := page = "images"
+}
 ToggleSidebar(*) {
-    global main, sidebar, toggleBtn, captureTab, fileTab, clipTab, saveTab
-    global categoryBox, nameBox, captureBtn, chooseBtn, clipBtn, saveBtn, statusText
+    global main, sidebar, toggleBtn, gatherTab, settingsTab, imagesTab
     static expanded := false
     expanded := !expanded
     if expanded {
-        sidebar.Move(0, 72, 150, 430)
-        toggleBtn.Move(105, 82, 34, 32)
-        captureTab.Move(55, 132, 90, 40)
-        fileTab.Move(55, 182, 90, 40)
-        clipTab.Move(55, 232, 90, 40)
-        saveTab.Move(55, 282, 90, 40)
-        toggleBtn.Text := "‹"
-        categoryBox.Move(185, 105, 420)
-        nameBox.Move(185, 150, 420)
-        captureBtn.Move(185, 205, 420, 38)
-        chooseBtn.Move(185, 253, 420, 38)
-        clipBtn.Move(185, 301, 420, 38)
-        saveBtn.Move(185, 357, 420, 42)
-        statusText.Move(185, 414, 420, 62)
-        main.Show("w640")
+        sidebar.Move(0,66,150,470), toggleBtn.Move(105,74,34,30)
+        gatherTab.Move(12,119,126,44), settingsTab.Move(12,173,126,44), imagesTab.Move(12,227,126,44)
+        gatherTab.Text := "◈  Gather", settingsTab.Text := "⚙  Settings", imagesTab.Text := "▧  Images"
+        toggleBtn.Text := "‹", main.Show("w740")
     } else {
-        sidebar.Move(0, 72, 64, 430)
-        toggleBtn.Move(15, 82, 34, 32)
-        captureTab.Move(12, 132, 40, 40)
-        fileTab.Move(12, 182, 40, 40)
-        clipTab.Move(12, 232, 40, 40)
-        saveTab.Move(12, 282, 40, 40)
-        toggleBtn.Text := "›"
-        categoryBox.Move(100, 105, 470)
-        nameBox.Move(100, 150, 470)
-        captureBtn.Move(100, 205, 470, 38)
-        chooseBtn.Move(100, 253, 470, 38)
-        clipBtn.Move(100, 301, 470, 38)
-        saveBtn.Move(100, 357, 470, 42)
-        statusText.Move(100, 414, 470, 62)
-        main.Show("w650")
+        sidebar.Move(0,66,64,470), toggleBtn.Move(15,74,34,30)
+        gatherTab.Move(9,119,46,44), settingsTab.Move(9,173,46,44), imagesTab.Move(9,227,46,44)
+        gatherTab.Text := "◈", settingsTab.Text := "⚙", imagesTab.Text := "▧"
+        toggleBtn.Text := "›", main.Show("w650")
     }
+}
+StartGather(*) {
+    global gatherStatus, durationBox, repeatBox
+    if (Trim(durationBox.Value) = "" || !IsNumber(durationBox.Value) || durationBox.Value <= 0) {
+        MsgBox("Enter a gather duration greater than zero.", "NectarX", "Icon!")
+        return
+    }
+    if (Trim(repeatBox.Value) = "" || !IsNumber(repeatBox.Value) || repeatBox.Value <= 0) {
+        MsgBox("Enter pattern repeats greater than zero.", "NectarX", "Icon!")
+        return
+    }
+    gatherStatus.Text := "Gather options are set; automation runner is not connected yet."
+    MsgBox("The Gather interface is ready, but the movement automation is not connected yet.", "NectarX", "Iconi")
+}
+StopGather(*) {
+    global gatherStatus
+    gatherStatus.Text := "No active gather runner."
+}
+SaveSettings(*) {
+    global RootDir, speedBox, gameBox, detectBox, cameraBox, settingsStatus
+    speed := Trim(speedBox.Value)
+    if (speed = "" || !IsNumber(speed) || speed <= 0 || speed > 5) {
+        MsgBox("Move speed must be greater than 0 and no more than 5.", "NectarX", "Icon!")
+        return
+    }
+    data := "move_speed=" speed "`n" . "game=" gameBox.Text "`n" . "game_detection=" detectBox.Text "`n" . "camera=" cameraBox.Text "`n"
+    path := RootDir "\nectarx_settings.ini"
+    try {
+        if FileExist(path)
+            FileDelete(path)
+        FileAppend(data, path, "UTF-8")
+        settingsStatus.Text := "✓"
+    } catch as err {
+        MsgBox("Could not save settings: " err.Message, "NectarX", "Iconx")
+    }
+}
+LoadSettings() {
+    global RootDir, speedBox, gameBox, detectBox, cameraBox
+    path := RootDir "\nectarx_settings.ini"
+    if !FileExist(path)
+        return
+    try {
+        for line in StrSplit(FileRead(path, "UTF-8"), "`n") {
+            parts := StrSplit(Trim(line), "=")
+            if (parts.Length < 2)
+                continue
+            if (parts[1] = "move_speed")
+                speedBox.Value := parts[2]
+            else if (parts[1] = "game")
+                gameBox.Text := parts[2]
+            else if (parts[1] = "game_detection")
+                detectBox.Text := parts[2]
+            else if (parts[1] = "camera")
+                cameraBox.Text := parts[2]
+        }
+    }
+}
+ResetSettings(*) {
+    global speedBox, gameBox, detectBox, cameraBox, settingsStatus
+    speedBox.Value := "1.0", gameBox.Choose(1), detectBox.Choose(1), cameraBox.Choose(1)
+    settingsStatus.Text := ""
 }
 
 CaptureScreen(*) {
