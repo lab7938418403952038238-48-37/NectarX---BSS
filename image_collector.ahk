@@ -113,20 +113,22 @@ aiGatherStatus := main.AddText("x105 y448 w470 h22 cEEEEEE", "Bottom-half scan. 
  routesFolderLabel := main.AddText("x105 y127 w470 h22 cEEEEEE", "Folder containing your route .ahk scripts")
  routesFolderBox := main.AddEdit("x105 y150 w365 h26 ReadOnly")
  routesFolderBtn := main.AddButton("x480 y149 w95 h28", "Choose")
- routesInfo := main.AddText("x105 y183 w470 h42 cD0D0D0", "Name scripts exactly as listed. These buttons launch scripts you create; NectarX does not guess map coordinates.")
+ routesInfo := main.AddText("x105 y183 w470 h30 cD0D0D0", "Timed keyboard route; test in-game before unattended use.")
+ spawnHive1Btn := main.AddButton("x105 y215 w470 h28", "Spawn → Hive Slot 1")
+ spawnHive1Btn.ToolTip := "Starter route from BSS spawn toward hive slot 1. Timings need calibration."
  routeButtons := []
  routeSpecs := [["hive_slot_1.ahk", "Hive slot 1 — by red cannon ramp"], ["hive_slot_2.ahk", "Hive slot 2"], ["hive_slot_3.ahk", "Hive slot 3"], ["hive_slot_4.ahk", "Hive slot 4"], ["hive_slot_5.ahk", "Hive slot 5"], ["hive_slot_6.ahk", "Hive slot 6 — by Noob Shop"], ["field_to_hive.ahk", "Field → Hive"], ["hive_to_red_cannon.ahk", "Hive → Red Cannon"], ["hive_to_field.ahk", "Hive → Field"], ["custom_route.ahk", "Other / custom route"]]
  for i, spec in routeSpecs {
      col := i <= 5 ? 0 : 1
      row := Mod(i - 1, 5)
      x := col = 0 ? 105 : 350
-     y := 235 + row * 42
+     y := 251 + row * 38
      label := main.AddText("x" x " y" (y+5) " w165 h28 cEEEEEE", spec[2])
      btn := main.AddButton("x" (x+170) " y" y " w70 h30", "Run")
      btn.OnEvent("Click", RunRouteScript.Bind(spec[1]))
      routeButtons.Push(label), routeButtons.Push(btn)
  }
- routesStatus := main.AddText("x105 y448 w470 h22 cD0D0D0", "Idle. F8 stops AI gathering; it does not stop separate route scripts.")
+ routesStatus := main.AddText("x105 y448 w470 h22 cD0D0D0", "Idle. F8 stops AI gathering; route scripts have their own F8 stop.")
 
 ; Status tab: current activity, event history, and Discord notification settings.
 statusPage := main.AddGroupBox("x82 y72 w550 h450", "")
@@ -173,6 +175,7 @@ statusTab.OnEvent("Click", (*) => ShowPage("status"))
 visionTab.OnEvent("Click", (*) => ShowPage("vision"))
 routesTab.OnEvent("Click", (*) => ShowPage("routes"))
 routesFolderBtn.OnEvent("Click", ChooseRouteScriptsFolder)
+spawnHive1Btn.OnEvent("Click", (*) => RunRouteScript("hive_slot_1.ahk"))
 toggleBtn.OnEvent("Click", ToggleSidebar)
 startBtn.OnEvent("Click", StartGather)
 stopBtn.OnEvent("Click", StopGather)
@@ -202,7 +205,7 @@ ShowPage(page) {
     global imagesPage, imagesTitle, categoryBox, nameBox, captureBtn, chooseBtn, clipBtn, saveBtn, statusText
     global visionPage, visionTitle, tokenImageLabel, tokenImageBox, tokenImageBtn, hasteFolderLabel, hasteFolderBox, hasteFolderBtn, visionStartBtn, visionStopBtn, visionStatus, visionRuleText, aiGatherTitle, aiTokenFolderLabel, aiTokenFolderBox, aiTokenFolderBtn, aiGatherStartBtn, aiGatherStopBtn, aiGatherStatus
     global statusPage, statusTitle, activityLabel, activityText, logLabel, activityBox, honeyLabel, honeyBox, updateHoneyBtn, honeyStatsText, webhookLabel, webhookBox, webhookEnable, saveWebhookBtn, testWebhookBtn, webhookStatus
-    global routesPage, routesTitle, routesFolderLabel, routesFolderBox, routesFolderBtn, routesInfo, routesStatus, routeButtons
+    global routesPage, routesTitle, routesFolderLabel, routesFolderBox, routesFolderBtn, routesInfo, routesStatus, routeButtons, spawnHive1Btn
     for c in [gatherPage,gatherTitle,fieldLabel,fieldBox,patternLabel,patternBox,timerLabel,timerBox,startBtn,stopBtn,gatherStatus]
         c.Visible := page = "gather"
     for c in [settingsPage,settingsTitle,speedLabel,speedBox,speedHint,gameLabel,gameBox,detectLabel,detectBox,cameraLabel,cameraBox,scanRateLabel,scanRateBox,scanRateHint,saveSettingsBtn,resetSettingsBtn,settingsStatus]
@@ -210,7 +213,7 @@ ShowPage(page) {
     for c in [visionPage,visionTitle,tokenImageLabel,tokenImageBox,tokenImageBtn,hasteFolderLabel,hasteFolderBox,hasteFolderBtn,visionStartBtn,visionStopBtn,visionStatus,visionRuleText,aiGatherTitle,aiTokenFolderLabel,aiTokenFolderBox,aiTokenFolderBtn,aiGatherStartBtn,aiGatherStopBtn,aiGatherStatus]
         c.Visible := page = "vision"
     routesPage.Visible := page = "routes"
-    routesTitle.Visible := page = "routes", routesFolderLabel.Visible := page = "routes", routesFolderBox.Visible := page = "routes", routesFolderBtn.Visible := page = "routes", routesInfo.Visible := page = "routes", routesStatus.Visible := page = "routes"
+    routesTitle.Visible := page = "routes", routesFolderLabel.Visible := page = "routes", routesFolderBox.Visible := page = "routes", routesFolderBtn.Visible := page = "routes", routesInfo.Visible := page = "routes", spawnHive1Btn.Visible := page = "routes", routesStatus.Visible := page = "routes"
     for c in routeButtons
         c.Visible := page = "routes"
     for c in [imagesPage,imagesTitle,categoryBox,nameBox,captureBtn,chooseBtn,clipBtn,saveBtn,statusText]
@@ -441,15 +444,18 @@ ChooseRouteScriptsFolder(*) {
     routesStatus.Text := "Folder selected. Save Settings to remember it."
 }
 RunRouteScript(fileName, *) {
-    global RouteScriptsFolder, routesFolderBox, routesStatus
+    global RouteScriptsFolder, routesFolderBox, routesStatus, RootDir
     folder := Trim(routesFolderBox.Value)
-    if (folder = "" || !DirExist(folder)) {
-        MsgBox("Choose a valid route scripts folder first.", "NectarX", "Icon!")
-        return
-    }
-    path := folder "\\" fileName
+    path := RootDir "\" fileName
     if !FileExist(path) {
-        MsgBox("Script not found:`n" path "`n`nCreate this .ahk file in your selected folder, then try again.", "NectarX", "Icon!")
+        if (folder = "" || !DirExist(folder)) {
+            MsgBox("This route is not in the NectarX folder. Choose a route scripts folder first.", "NectarX", "Icon!")
+            return
+        }
+        path := folder "\" fileName
+    }
+    if !FileExist(path) {
+        MsgBox("Script not found:`n" path "`n`nPut the .ahk file in the NectarX folder or your selected route folder.", "NectarX", "Icon!")
         return
     }
     try {
