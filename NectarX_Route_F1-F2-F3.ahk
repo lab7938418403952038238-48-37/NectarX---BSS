@@ -2,17 +2,23 @@
 #SingleInstance Force
 Persistent
 SendMode "Event"
-SetKeyDelay 25, 25
+SetKeyDelay 10, 10
 CoordMode "Pixel", "Screen"
 
-; F1 = start (or resume after pausing)
+; NectarX TinyTask-timed route player (AutoHotkey v2)
+; F1 = start / resume
 ; F2 = pause / resume
-; F3 = stop route immediately
-; F4 = exit script
+; F3 = stop route and release keys
+; F4 = exit
 ;
-; Six cycles: W 4s, D 6s, S 0.75s, A 0.5s, A 2s,
-; wait 2s, then search the screen for the selected hive image.
-; If found, press E once and stop.
+; Timings are read from the keyboard events in:
+; "to hive from spawn ( NectarX ).rec"
+; Mouse movement and mouse clicks are intentionally ignored.
+;
+; IMPORTANT: the recording contains W, Space, S and A keyboard events.
+; It contains NO D/right-key event. Do not assume this route matches a
+; camera-dependent Roblox path when mouse movement is disabled.
+; This sends inputs only; it cannot set Roblox WalkSpeed to 32.2.
 
 global Running := false
 global Paused := false
@@ -25,7 +31,7 @@ if (ClaimImage = "") {
     MsgBox "No screenshot selected. The script will exit."
     ExitApp
 }
-TrayTip "F1 start/resume | F2 pause | F3 stop | F4 exit", "NectarX Route Runner", 1
+TrayTip "F1 start/resume | F2 pause | F3 stop | F4 exit", "NectarX TinyTask Route", 1
 
 F1::StartRoute()
 F2::PauseRoute()
@@ -72,41 +78,59 @@ StopRoute() {
 
 RunRoute() {
     global Running, Paused, StopRequested, RouteBusy, ClaimImage
+    ; Each row is [milliseconds since first recorded key event, scan code, down/up].
+    ; These offsets are derived from the actual timestamps in the .rec file.
+    events := [
+        [0,     "sc011", true],   ; W down
+        [4313,  "sc011", false],  ; W up
+        [4516,  "sc039", true],   ; Space down
+        [7891,  "sc039", false],  ; Space up
+        [8047,  "sc01F", true],   ; S down
+        [8438,  "sc01F", false],  ; S up
+        [8672,  "sc01E", true],   ; A down
+        [9125,  "sc01E", false],  ; A up
+        [14972, "sc01E", true],   ; A down
+        [16081, "sc01E", false],  ; A up
+        [24219, "sc01E", true],   ; A down
+        [25453, "sc01E", false],  ; A up
+        [31141, "sc01E", true],   ; A down
+        [32234, "sc01E", false],  ; A up
+        [39438, "sc01E", true],   ; A down
+        [40391, "sc01E", false],  ; A up
+        [46438, "sc01E", true],   ; A down
+        [47656, "sc01E", false]   ; A up
+    ]
+
     try {
         Loop 6 {
+            cycle := A_Index
             if !WaitUntilRunnable()
                 return
-            ToolTip "NectarX: cycle " A_Index "/6 — W forward 4s"
-            if !HoldKey("w", 4000)
-                return
-            ToolTip "NectarX: cycle " A_Index "/6 — D right 6s"
-            if !HoldKey("d", 6000)
-                return
-            ToolTip "NectarX: cycle " A_Index "/6 — S backward 0.75s"
-            if !HoldKey("s", 750)
-                return
-            ToolTip "NectarX: cycle " A_Index "/6 — A left 0.5s"
-            if !HoldKey("a", 500)
-                return
-            ToolTip "NectarX: cycle " A_Index "/6 — A left 2s"
-            if !HoldKey("a", 2000)
-                return
-            if !InterruptibleSleep(2000)
-                return
+            ToolTip "NectarX: replaying recorded keyboard timings — cycle " cycle "/6"
+            cycleStart := A_TickCount
 
-            ToolTip "NectarX: cycle " A_Index "/6 — checking image"
+            for event in events {
+                if !WaitForRecordingTime(cycleStart, event[1])
+                    return
+                if event[3]
+                    Send "{" event[2] " down}"
+                else
+                    Send "{" event[2] " up}"
+            }
+
+            ReleaseMovementKeys()
+            ToolTip "NectarX: cycle " cycle "/6 — checking hive image"
             if FindClaimImage(ClaimImage) {
-                ReleaseMovementKeys()
                 Send "{e}"
                 Running := false
                 StopRequested := true
-                ToolTip "NectarX: image found — E pressed; stopped"
+                ToolTip "NectarX: hive image found — E pressed; stopped"
                 SetTimer () => ToolTip(), -2500
                 return
             }
         }
         if !StopRequested {
-            ToolTip "NectarX: completed 6 cycles; image not found"
+            ToolTip "NectarX: completed 6 recordings; image not found"
             SetTimer () => ToolTip(), -2500
         }
     } catch as err {
@@ -120,33 +144,21 @@ RunRoute() {
     }
 }
 
-HoldKey(key, durationMs) {
-    global StopRequested
-    if !WaitUntilRunnable()
-        return false
-    Send "{" key " down}"
-    startTime := A_TickCount
-    try {
-        while (A_TickCount - startTime < durationMs) {
-            if !WaitUntilRunnable()
-                return false
-            Sleep 20
-        }
-    } finally {
-        Send "{" key " up}"
-    }
-    return !StopRequested
-}
-
-InterruptibleSleep(durationMs) {
-    global StopRequested
-    startTime := A_TickCount
-    while (A_TickCount - startTime < durationMs) {
+WaitForRecordingTime(cycleStart, targetMs) {
+    global StopRequested, ClaimImage
+    while (A_TickCount - cycleStart < targetMs) {
         if !WaitUntilRunnable()
             return false
-        Sleep 20
+        ; Check the claim image during the recorded pauses, not only at cycle end.
+        if FindClaimImage(ClaimImage) {
+            ReleaseMovementKeys()
+            Send "{e}"
+            StopRoute()
+            return false
+        }
+        Sleep 200
     }
-    return !StopRequested
+    return WaitUntilRunnable()
 }
 
 WaitUntilRunnable() {
@@ -166,5 +178,5 @@ FindClaimImage(imagePath) {
 }
 
 ReleaseMovementKeys() {
-    Send "{w up}{a up}{s up}{d up}{e up}"
+    Send "{sc011 up}{sc039 up}{sc01F up}{sc01E up}{w up}{a up}{s up}{d up}{e up}"
 }
