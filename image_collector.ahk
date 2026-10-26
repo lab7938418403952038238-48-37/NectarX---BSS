@@ -12,6 +12,7 @@ global WebhookPath := RootDir "\nectarx_webhook.txt"
 global WebhookUrl := ""
 global HoneySession := 0
 global SessionStartTick := A_TickCount
+global HoneyHistory := []
 
 main := Gui("+Resize", "NectarX")
 main.BackColor := "55585D"
@@ -300,15 +301,20 @@ SendWebhook(message, force := false) {
     }
 }
 UpdateHoneyStats(*) {
-    global honeyBox, HoneySession
+    global honeyBox, HoneySession, HoneyHistory, SessionStartTick
     value := Trim(honeyBox.Value)
     if (value = "" || !IsNumber(value) || value < 0) {
         MsgBox("Enter a valid non-negative honey amount.", "NectarX", "Icon!")
         return
     }
     HoneySession := value + 0
+    elapsed := Max(1, (A_TickCount - SessionStartTick) / 1000)
+    ; Store one checkpoint whenever the user updates the session total.
+    HoneyHistory.Push({seconds: elapsed, honey: HoneySession})
+    while (HoneyHistory.Length > 12)
+        HoneyHistory.RemoveAt(1)
     RefreshActivity()
-    LogActivity("Session honey total updated to " FormatHoney(HoneySession) ".")
+    LogActivity("Honey checkpoint saved: " FormatHoney(HoneySession) " total. Analytics sent if Discord updates are enabled.")
 }
 StatsSummary() {
     global HoneySession, SessionStartTick
@@ -317,14 +323,41 @@ StatsSummary() {
     return FormatHoney(perSec) " honey/s  |  " FormatHoney(perSec * 60) " honey/min  |  " FormatHoney(perSec * 3600) " honey/hour"
 }
 BuildHoneyGraph(perSec, perMin, perHour) {
-    maxVal := Max(perSec, perMin, perHour, 1)
-    return "HONEY / SEC  " Bar(perSec, maxVal) " " FormatHoney(perSec) "`n"
-        . "HONEY / MIN  " Bar(perMin, maxVal) " " FormatHoney(perMin) "`n"
-        . "HONEY / HOUR " Bar(perHour, maxVal) " " FormatHoney(perHour)
+    global HoneyHistory
+    graph := "RATE SNAPSHOT`n"
+        . "Per second : " FormatHoney(perSec) " honey/s`n"
+        . "Per minute : " FormatHoney(perMin) " honey/min`n"
+        . "Per hour   : " FormatHoney(perHour) " honey/hour`n`n"
+        . "SESSION CHECKPOINTS (latest 12)`n"
+    if (HoneyHistory.Length = 0)
+        return graph "No checkpoints yet. Click Update stats to record one."
+    maxHoney := 1
+    for point in HoneyHistory
+        maxHoney := Max(maxHoney, point.honey)
+    startAt := Max(1, HoneyHistory.Length - 7)
+    for i, point in HoneyHistory {
+        if (i < startAt)
+            continue
+        minutes := Floor(point.seconds / 60)
+        seconds := Mod(Floor(point.seconds), 60)
+        elapsedLabel := Format("{:02}:{:02}", minutes, seconds)
+        graph .= elapsedLabel " | " Bar(point.honey, maxHoney, 16) " "
+            . FormatHoney(point.honey) " honey`n"
+        if (i > startAt) {
+            previous := HoneyHistory[i - 1]
+            gained := Max(0, point.honey - previous.honey)
+            graph .= "       +" FormatHoney(gained) " since previous checkpoint`n"
+        }
+    }
+    if (HoneyHistory.Length < 2)
+        graph .= "`nUpdate the total again later to show session progress."
+    return graph
 }
-Bar(value, maxVal) {
-    length := Round((value / maxVal) * 14)
-    return StrReplace(Format("{:" length "}", ""), " ", "█")
+Bar(value, maxVal, width := 16) {
+    length := (maxVal <= 0) ? 0 : Round((value / maxVal) * width)
+    if (length < 1 && value > 0)
+        length := 1
+    return (length > 0 ? StrReplace(Format("{:" length "}", ""), " ", "█") : "·")
 }
 FormatHoney(value) {
     return Format("{:,.2f}", value)
