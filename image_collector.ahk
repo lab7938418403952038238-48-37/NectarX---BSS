@@ -7,6 +7,9 @@ global ManifestPath := ImageRoot "\image_manifest.json"
 global TempPath := A_Temp "\nectarx_capture.png"
 global Categories := ["fields_landmarks", "tokens_flowers", "backpack_pollen", "hive_conversion", "movement_travel", "npcs_quests", "bees_abilities", "planters", "menus_ui", "other"]
 global CurrentImage := ""
+global ActivityLog := "NectarX started."
+global WebhookPath := RootDir "\nectarx_webhook.txt"
+global WebhookUrl := ""
 
 main := Gui("+Resize", "NectarX")
 main.BackColor := "55585D"
@@ -19,7 +22,8 @@ toggleBtn := main.AddButton("x15 y74 w34 h30", "‹")
 gatherTab := main.AddButton("x9 y119 w46 h44", "◈")
 settingsTab := main.AddButton("x9 y173 w46 h44", "⚙")
 imagesTab := main.AddButton("x9 y227 w46 h44", "▧")
-gatherTab.ToolTip := "Gather", settingsTab.ToolTip := "Settings", imagesTab.ToolTip := "Images"
+statusTab := main.AddButton("x9 y281 w46 h44", "◷")
+gatherTab.ToolTip := "Gather", settingsTab.ToolTip := "Settings", imagesTab.ToolTip := "Images", statusTab.ToolTip := "Status"
 
 ; Gather tab
 gatherPage := main.AddGroupBox("x82 y72 w550 h450", "")
@@ -56,6 +60,21 @@ resetSettingsBtn := main.AddButton("x345 y330 w220 h42", "↺")
 settingsStatus := main.AddText("x105 y390 w470 h40 cEEEEEE", "")
 saveSettingsBtn.ToolTip := "Save settings", resetSettingsBtn.ToolTip := "Reset settings"
 
+; Status tab: current activity, event history, and Discord notification settings.
+statusPage := main.AddGroupBox("x82 y72 w550 h450", "")
+statusTitle := main.AddText("x105 y91 w490 h30 cF0F0F0", "◷")
+statusTitle.SetFont("s16 Bold", "Segoe UI")
+activityLabel := main.AddText("x105 y128 w470 h22 cEEEEEE", "Current activity")
+activityText := main.AddText("x105 y151 w470 h30 cFFFFFF", "Ready")
+logLabel := main.AddText("x105 y188 w470 h22 cEEEEEE", "Recent activity")
+activityBox := main.AddEdit("x105 y211 w470 h105 ReadOnly -Wrap")
+webhookLabel := main.AddText("x105 y332 w470 h22 cEEEEEE", "Discord webhook URL")
+webhookBox := main.AddEdit("x105 y356 w470 h28 Password")
+webhookEnable := main.AddCheckbox("x105 y392 w260 h24", "Send activity updates to Discord")
+saveWebhookBtn := main.AddButton("x105 y428 w135 h36", "Save")
+testWebhookBtn := main.AddButton("x255 y428 w135 h36", "Test")
+webhookStatus := main.AddText("x400 y433 w175 h24 cEEEEEE", "")
+webhookBox.ToolTip := "Paste a Discord webhook URL. Keep it private."
 ; Images tab retains the screenshot/template collector.
 imagesPage := main.AddGroupBox("x82 y72 w550 h450", "")
 imagesTitle := main.AddText("x105 y91 w490 h30 cF0F0F0", "▧")
@@ -78,13 +97,18 @@ saveBtn.OnEvent("Click", SaveImage)
 gatherTab.OnEvent("Click", (*) => ShowPage("gather"))
 settingsTab.OnEvent("Click", (*) => ShowPage("settings"))
 imagesTab.OnEvent("Click", (*) => ShowPage("images"))
+statusTab.OnEvent("Click", (*) => ShowPage("status"))
 toggleBtn.OnEvent("Click", ToggleSidebar)
 startBtn.OnEvent("Click", StartGather)
 stopBtn.OnEvent("Click", StopGather)
 saveSettingsBtn.OnEvent("Click", SaveSettings)
 resetSettingsBtn.OnEvent("Click", ResetSettings)
+saveWebhookBtn.OnEvent("Click", SaveWebhook)
+testWebhookBtn.OnEvent("Click", TestWebhook)
 main.OnEvent("Close", (*) => ExitApp())
 LoadSettings()
+LoadWebhook()
+LogActivity("NectarX ready. Gather automation runner is not connected.")
 ShowPage("gather")
 main.Show("w650 h550")
 
@@ -92,31 +116,36 @@ ShowPage(page) {
     global gatherPage, gatherTitle, fieldLabel, fieldBox, patternLabel, patternBox, durationLabel, durationBox, repeatLabel, repeatBox, startBtn, stopBtn, gatherStatus
     global settingsPage, settingsTitle, speedLabel, speedBox, speedHint, gameLabel, gameBox, detectLabel, detectBox, cameraLabel, cameraBox, saveSettingsBtn, resetSettingsBtn, settingsStatus
     global imagesPage, imagesTitle, categoryBox, nameBox, captureBtn, chooseBtn, clipBtn, saveBtn, statusText
+    global statusPage, statusTitle, activityLabel, activityText, logLabel, activityBox, webhookLabel, webhookBox, webhookEnable, saveWebhookBtn, testWebhookBtn, webhookStatus
     for c in [gatherPage,gatherTitle,fieldLabel,fieldBox,patternLabel,patternBox,durationLabel,durationBox,repeatLabel,repeatBox,startBtn,stopBtn,gatherStatus]
         c.Visible := page = "gather"
     for c in [settingsPage,settingsTitle,speedLabel,speedBox,speedHint,gameLabel,gameBox,detectLabel,detectBox,cameraLabel,cameraBox,saveSettingsBtn,resetSettingsBtn,settingsStatus]
         c.Visible := page = "settings"
     for c in [imagesPage,imagesTitle,categoryBox,nameBox,captureBtn,chooseBtn,clipBtn,saveBtn,statusText]
         c.Visible := page = "images"
+    for c in [statusPage,statusTitle,activityLabel,activityText,logLabel,activityBox,webhookLabel,webhookBox,webhookEnable,saveWebhookBtn,testWebhookBtn,webhookStatus]
+        c.Visible := page = "status"
+    if (page = "status")
+        RefreshActivity()
 }
 ToggleSidebar(*) {
-    global main, sidebar, toggleBtn, gatherTab, settingsTab, imagesTab
+    global main, sidebar, toggleBtn, gatherTab, settingsTab, imagesTab, statusTab
     static expanded := false
     expanded := !expanded
     if expanded {
         sidebar.Move(0,66,150,470), toggleBtn.Move(105,74,34,30)
-        gatherTab.Move(12,119,126,44), settingsTab.Move(12,173,126,44), imagesTab.Move(12,227,126,44)
-        gatherTab.Text := "◈  Gather", settingsTab.Text := "⚙  Settings", imagesTab.Text := "▧  Images"
+        gatherTab.Move(12,119,126,44), settingsTab.Move(12,173,126,44), imagesTab.Move(12,227,126,44), statusTab.Move(12,281,126,44)
+        gatherTab.Text := "◈  Gather", settingsTab.Text := "⚙  Settings", imagesTab.Text := "▧  Images", statusTab.Text := "◷  Status"
         toggleBtn.Text := "‹", main.Show("w740")
     } else {
         sidebar.Move(0,66,64,470), toggleBtn.Move(15,74,34,30)
-        gatherTab.Move(9,119,46,44), settingsTab.Move(9,173,46,44), imagesTab.Move(9,227,46,44)
-        gatherTab.Text := "◈", settingsTab.Text := "⚙", imagesTab.Text := "▧"
+        gatherTab.Move(9,119,46,44), settingsTab.Move(9,173,46,44), imagesTab.Move(9,227,46,44), statusTab.Move(9,281,46,44)
+        gatherTab.Text := "◈", settingsTab.Text := "⚙", imagesTab.Text := "▧", statusTab.Text := "◷"
         toggleBtn.Text := "›", main.Show("w650")
     }
 }
 StartGather(*) {
-    global gatherStatus, durationBox, repeatBox
+    global gatherStatus, durationBox, repeatBox, fieldBox, patternBox
     if (Trim(durationBox.Value) = "" || !IsNumber(durationBox.Value) || durationBox.Value <= 0) {
         MsgBox("Enter a gather duration greater than zero.", "NectarX", "Icon!")
         return
@@ -126,11 +155,13 @@ StartGather(*) {
         return
     }
     gatherStatus.Text := "Gather options are set; automation runner is not connected yet."
+    LogActivity("Gather requested for " fieldBox.Text " using " patternBox.Text ". Runner is not connected.")
     MsgBox("The Gather interface is ready, but the movement automation is not connected yet.", "NectarX", "Iconi")
 }
 StopGather(*) {
     global gatherStatus
     gatherStatus.Text := "No active gather runner."
+    LogActivity("Stop requested. No gather runner was active.")
 }
 SaveSettings(*) {
     global RootDir, speedBox, gameBox, detectBox, cameraBox, settingsStatus
@@ -146,6 +177,7 @@ SaveSettings(*) {
             FileDelete(path)
         FileAppend(data, path, "UTF-8")
         settingsStatus.Text := "✓"
+        LogActivity("Settings saved locally.")
     } catch as err {
         MsgBox("Could not save settings: " err.Message, "NectarX", "Iconx")
     }
@@ -175,6 +207,77 @@ ResetSettings(*) {
     global speedBox, gameBox, detectBox, cameraBox, settingsStatus
     speedBox.Value := "1.0", gameBox.Choose(1), detectBox.Choose(1), cameraBox.Choose(1)
     settingsStatus.Text := ""
+}
+
+LogActivity(message) {
+    global ActivityLog
+    line := FormatTime(, "HH:mm:ss") "  " message
+    ActivityLog := line Chr(13) Chr(10) ActivityLog
+    if (StrLen(ActivityLog) > 6000)
+        ActivityLog := SubStr(ActivityLog, 1, 6000)
+    RefreshActivity()
+    SendWebhook(message)
+}
+RefreshActivity() {
+    global ActivityLog, activityBox, activityText
+    try activityBox.Value := ActivityLog
+    try activityText.Text := StrSplit(ActivityLog, Chr(13) Chr(10))[1]
+}
+LoadWebhook() {
+    global WebhookPath, WebhookUrl, webhookBox
+    if FileExist(WebhookPath) {
+        try WebhookUrl := Trim(FileRead(WebhookPath, "UTF-8"))
+        try webhookBox.Value := WebhookUrl
+    }
+}
+SaveWebhook(*) {
+    global WebhookPath, WebhookUrl, webhookBox, webhookStatus
+    url := Trim(webhookBox.Value)
+    if (url != "" && !RegExMatch(url, "^https://(discord\.com|discordapp\.com)/api/webhooks/")) {
+        MsgBox("Enter a Discord webhook URL beginning with https://discord.com/api/webhooks/.", "NectarX", "Icon!")
+        return
+    }
+    WebhookUrl := url
+    try {
+        if FileExist(WebhookPath)
+            FileDelete(WebhookPath)
+        FileAppend(WebhookUrl, WebhookPath, "UTF-8")
+        webhookStatus.Text := "Saved"
+        LogActivity("Discord webhook settings saved.")
+    } catch as err {
+        MsgBox("Could not save webhook settings: " err.Message, "NectarX", "Iconx")
+    }
+}
+TestWebhook(*) {
+    global WebhookUrl, webhookBox, webhookStatus
+    WebhookUrl := Trim(webhookBox.Value)
+    if (WebhookUrl = "") {
+        MsgBox("Paste a Discord webhook URL first.", "NectarX", "Icon!")
+        return
+    }
+    if SendWebhook("NectarX webhook test: connection configured.", true) {
+        webhookStatus.Text := "Test sent"
+        LogActivity("Discord webhook test sent.")
+    } else {
+        webhookStatus.Text := "Failed"
+        MsgBox("Webhook test failed. Check the URL and internet connection.", "NectarX", "Iconx")
+    }
+}
+SendWebhook(message, force := false) {
+    global WebhookUrl, webhookEnable
+    if (Trim(WebhookUrl) = "")
+        return false
+    if (!force && !webhookEnable.Value)
+        return false
+    try {
+        request := ComObject("WinHttp.WinHttpRequest.5.1")
+        request.Open("POST", WebhookUrl, false)
+        request.SetRequestHeader("Content-Type", "application/json")
+        request.Send("{""content"":""" JsonEscape("**NectarX** · " message) """}")
+        return request.Status >= 200 && request.Status < 300
+    } catch {
+        return false
+    }
 }
 
 CaptureScreen(*) {
@@ -213,6 +316,7 @@ ChooseImage(*) {
     if (file = "")
         return
     CurrentImage := file
+    LogActivity("Selected image: " file)
     if (Trim(nameBox.Value) = "") {
         SplitPath(file, &baseName)
         nameBox.Value := baseName
@@ -315,6 +419,7 @@ SaveImage(*) {
         CurrentImage := ""
         nameBox.Value := ""
         statusText.Text := "✓"
+        LogActivity("Saved image: " relativePath)
         MsgBox("Image saved:`n" target "`n`nManifest updated.", "NectarX", "Iconi")
     } catch as err {
         MsgBox("Save failed:`n" err.Message, "NectarX", "Iconx")
