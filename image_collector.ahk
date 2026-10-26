@@ -8,30 +8,94 @@ global TempPath := A_Temp "\nectarx_capture.png"
 global Categories := ["fields_landmarks", "tokens_flowers", "backpack_pollen", "hive_conversion", "movement_travel", "npcs_quests", "bees_abilities", "planters", "menus_ui", "other"]
 global CurrentImage := ""
 
-main := Gui(, "NectarX — Image Collector (AHK v2)")
+main := Gui("+Resize", "NectarX")
+main.BackColor := "55585D"
 main.SetFont("s10", "Segoe UI")
-main.AddText("w470", "NectarX Image Collector")
-main.AddText("w470 c666666", "Capture or choose real Bee Swarm Simulator screenshots and label them.")
-main.AddText("xm y+14", "Category")
-categoryBox := main.AddDropDownList("xm y+5 w470 Choose1", Categories)
-main.AddText("xm y+12", "Image name (example: field_clover)")
-nameBox := main.AddEdit("xm y+5 w470")
-captureBtn := main.AddButton("xm y+14 w470 h32", "1. Capture full screen")
-chooseBtn := main.AddButton("xm y+7 w470 h32", "2. Choose screenshot file")
-clipBtn := main.AddButton("xm y+7 w470 h32", "3. Save image from clipboard")
-saveBtn := main.AddButton("xm y+14 w470 h36 Default", "Save image to library")
-statusText := main.AddText("xm y+12 w470 h48 c555555", "Images save locally to: " ImageRoot)
-main.AddText("xm y+3 w470 c666666", "Tip: use Win+Shift+S to crop a region, then click 'Save image from clipboard'.")
+main.MarginX := 0
+main.MarginY := 0
+
+; Minimal logo in the upper-left; the vertical icon rail sits directly below it.
+logo := main.AddText("x18 y16 w46 h46 Center 0x200 cF0F0F0", "⬡")
+logo.SetFont("s28", "Segoe UI Symbol")
+sidebar := main.AddText("x0 y72 w64 h430 Background:44474B", "")
+toggleBtn := main.AddButton("x15 y82 w34 h32", "‹")
+captureTab := main.AddButton("x12 y132 w40 h40", "◉")
+fileTab := main.AddButton("x12 y182 w40 h40", "▧")
+clipTab := main.AddButton("x12 y232 w40 h40", "▣")
+saveTab := main.AddButton("x12 y282 w40 h40", "↓")
+
+categoryBox := main.AddDropDownList("x100 y105 w470 Choose1", Categories)
+nameBox := main.AddEdit("x100 y150 w470")
+captureBtn := main.AddButton("x100 y205 w470 h38", "◉")
+chooseBtn := main.AddButton("x100 y253 w470 h38", "▧")
+clipBtn := main.AddButton("x100 y301 w470 h38", "▣")
+saveBtn := main.AddButton("x100 y357 w470 h42 Default", "↓")
+statusText := main.AddText("x100 y414 w470 h62 cEEEEEE", "")
+
+; Tooltips provide guidance without adding visible labels.
+toggleBtn.ToolTip := "Expand or collapse the sidebar"
+captureTab.ToolTip := "Capture screen"
+fileTab.ToolTip := "Choose image file"
+clipTab.ToolTip := "Use clipboard image"
+saveTab.ToolTip := "Save image"
+categoryBox.ToolTip := "Image category"
+nameBox.ToolTip := "Image name"
+
 captureBtn.OnEvent("Click", CaptureScreen)
 chooseBtn.OnEvent("Click", ChooseImage)
 clipBtn.OnEvent("Click", SaveClipboardImage)
 saveBtn.OnEvent("Click", SaveImage)
+captureTab.OnEvent("Click", CaptureScreen)
+fileTab.OnEvent("Click", ChooseImage)
+clipTab.OnEvent("Click", SaveClipboardImage)
+saveTab.OnEvent("Click", SaveImage)
+toggleBtn.OnEvent("Click", ToggleSidebar)
 main.OnEvent("Close", (*) => ExitApp())
-main.Show()
+main.Show("w650 h520")
+
+ToggleSidebar(*) {
+    global main, sidebar, toggleBtn, captureTab, fileTab, clipTab, saveTab
+    global categoryBox, nameBox, captureBtn, chooseBtn, clipBtn, saveBtn, statusText
+    static expanded := false
+    expanded := !expanded
+    if expanded {
+        sidebar.Move(0, 72, 150, 430)
+        toggleBtn.Move(105, 82, 34, 32)
+        captureTab.Move(55, 132, 90, 40)
+        fileTab.Move(55, 182, 90, 40)
+        clipTab.Move(55, 232, 90, 40)
+        saveTab.Move(55, 282, 90, 40)
+        toggleBtn.Text := "‹"
+        categoryBox.Move(185, 105, 420)
+        nameBox.Move(185, 150, 420)
+        captureBtn.Move(185, 205, 420, 38)
+        chooseBtn.Move(185, 253, 420, 38)
+        clipBtn.Move(185, 301, 420, 38)
+        saveBtn.Move(185, 357, 420, 42)
+        statusText.Move(185, 414, 420, 62)
+        main.Show("w640")
+    } else {
+        sidebar.Move(0, 72, 64, 430)
+        toggleBtn.Move(15, 82, 34, 32)
+        captureTab.Move(12, 132, 40, 40)
+        fileTab.Move(12, 182, 40, 40)
+        clipTab.Move(12, 232, 40, 40)
+        saveTab.Move(12, 282, 40, 40)
+        toggleBtn.Text := "›"
+        categoryBox.Move(100, 105, 470)
+        nameBox.Move(100, 150, 470)
+        captureBtn.Move(100, 205, 470, 38)
+        chooseBtn.Move(100, 253, 470, 38)
+        clipBtn.Move(100, 301, 470, 38)
+        saveBtn.Move(100, 357, 470, 42)
+        statusText.Move(100, 414, 470, 62)
+        main.Show("w650")
+    }
+}
 
 CaptureScreen(*) {
     global TempPath, CurrentImage, nameBox, statusText
-    statusText.Text := "Capturing screen..."
+    statusText.Text := "…"
     ps := A_Temp "\nectarx_capture.ps1"
     script := "$ErrorActionPreference='Stop'`n"
         . "Add-Type -AssemblyName System.Windows.Forms`n"
@@ -52,10 +116,10 @@ CaptureScreen(*) {
         CurrentImage := TempPath
         if (Trim(nameBox.Value) = "")
             nameBox.Value := "screen_capture"
-        statusText.Text := "Screen captured. Enter a descriptive name, then save."
+        statusText.Text := "✓"
     } catch as err {
         MsgBox("Capture failed:`n" err.Message, "NectarX", "Iconx")
-        statusText.Text := "Capture failed."
+        statusText.Text := "×"
     }
 }
 
@@ -69,7 +133,7 @@ ChooseImage(*) {
         SplitPath(file, &baseName)
         nameBox.Value := baseName
     }
-    statusText.Text := "Selected: " file
+    statusText.Text := "✓"
 }
 
 SaveClipboardImage(*) {
@@ -92,10 +156,10 @@ SaveClipboardImage(*) {
         CurrentImage := TempPath
         if (Trim(nameBox.Value) = "")
             nameBox.Value := "screen_region"
-        statusText.Text := "Clipboard image ready. Enter a name, then save."
+        statusText.Text := "✓"
     } catch as err {
         MsgBox(err.Message, "NectarX", "Iconx")
-        statusText.Text := "Clipboard capture failed."
+        statusText.Text := "×"
     }
 }
 
@@ -166,7 +230,7 @@ SaveImage(*) {
         FileAppend(manifest, ManifestPath, "UTF-8")
         CurrentImage := ""
         nameBox.Value := ""
-        statusText.Text := "Saved " relativePath
+        statusText.Text := "✓"
         MsgBox("Image saved:`n" target "`n`nManifest updated.", "NectarX", "Iconi")
     } catch as err {
         MsgBox("Save failed:`n" err.Message, "NectarX", "Iconx")
