@@ -204,7 +204,7 @@ StopGather(*) {
     LogActivity("Stop requested. No gather runner was active.")
 }
 SaveSettings(*) {
-    global RootDir, speedBox, gameBox, detectBox, cameraBox, settingsStatus
+    global RootDir, speedBox, gameBox, detectBox, cameraBox, scanRateBox, tokenImageBox, hasteFolderBox, settingsStatus
     speed := Trim(speedBox.Value)
     if (speed = "" || !IsNumber(speed) || speed <= 0 || speed > 5) {
         MsgBox("Move speed must be greater than 0 and no more than 5.", "NectarX", "Icon!")
